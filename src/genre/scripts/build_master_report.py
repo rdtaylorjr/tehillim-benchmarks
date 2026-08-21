@@ -1,7 +1,6 @@
 """Joins the AP/AUC/calibration summary and bootstrap CIs into one long table with BY-FDR q's."""
 
 import argparse
-import shutil
 from pathlib import Path
 
 import pandas as pd
@@ -94,7 +93,6 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--summary-csv", type=Path, required=True)
     parser.add_argument("--bootstrap-csv", type=Path, required=True)
-    parser.add_argument("--detail-dir", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -107,11 +105,6 @@ def main() -> None:
 
     wide_df = _pivot_wide(long_df)
     wide_df.to_parquet(args.output_dir / "genre_metrics_wide.parquet", index=False)
-
-    shutil.copyfile(
-        args.detail_dir / "genre_pair_detail.parquet",
-        args.output_dir / "genre_pair_detail.parquet",
-    )
 
     print(f"genre_metrics_long: {len(long_df)} rows")
     print(f"genre_metrics_wide: {len(wide_df)} rows")

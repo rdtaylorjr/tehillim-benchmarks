@@ -1,7 +1,7 @@
 # tehillim-evaluate
 
 Evaluates embedding models against scholarly annotations of Psalms parallelism and genre, scoring vectors from
-[tehillim-representations](https://github.com/rdtaylorjr/tehillim-embeddings) on a retrieval benchmark
+[tehillim-representations](https://github.com/rdtaylorjr/tehillim-representations) on a retrieval benchmark
 built from [tehillim-parallelism](https://github.com/rdtaylorjr/tehillim-parallelism)'s aligned
 `parallel_*` Text-Fabric features. Consumes both as pure data dependencies, never as code
 dependencies.
@@ -18,10 +18,16 @@ dependencies.
 Every benchmark script's `--output`/`--output-dir` writes into a local
 [tehillim-data](https://github.com/rdtaylorjr/tehillim-data) checkout, kept as a separate repo
 since result Parquet files run tens of megabytes each and bloat a code repo's clone size and
-history. That checkout is Hive-partitioned the same way as `tehillim-representations`,
-`benchmark={parallelism,genre,trajectory}/family={lexical,semantic}/...`, so point a script's
-`--output`/`--output-dir` at the matching `benchmark=`/`family=` directory. `results.csv` in the
-examples below is illustrative, point it wherever you check that out.
+history. That checkout is Hive-partitioned the same way as `tehillim-representations`:
+`benchmark={parallelism,genre,trajectory}/family={lexical,semantic}/stage={raw,detail,master,shuffle_control}/...`.
+`stage=raw` holds each comparison script's own CSV output, `stage=detail` the per-observation
+Parquet export, `stage=master` the joined final report, `stage=shuffle_control` the order-shuffle
+null control. Trajectory has no `detail`/`master`/`shuffle_control` stage: `compute_profiles.py`
+writes both the per-model profile shards and the derived `trajectory_distances.parquet` together
+under `stage=profiles`, `validate_against_genre.py` writes its permutation-test CSVs under
+`stage=raw`, and `export_ui_rows.py` writes its JSON payloads under `stage=ui`. Point a script's
+`--output`/`--output-dir` at the matching `stage=` directory. `results.csv` in the examples below
+is illustrative, point it wherever you check that out.
 
 ## Methodology
 
@@ -255,15 +261,23 @@ the naive per-pair form does not scale past a few thousand permutations at 150 p
 |---|---|
 | `compute_profiles.py` | content centroid, structural profile, and geometry curves per psalm, every model |
 | `validate_against_genre.py` | pooled permutation test of within/between-genre distance (raw, length-controlled, length-and-content-controlled), plus a per-genre one-vs-rest breakdown |
+| `export_ui_rows.py` | selects the UI's trajectory columns from `validate_against_genre.py`'s CSVs |
 
 ```bash
+DATA=/path/to/tehillim-data/benchmark=trajectory/family=semantic
 .venv/bin/python -m trajectory.scripts.compute_profiles \
   /path/to/tehillim-representations/data/type=semantic \
-  --output-dir "/path/to/tehillim-data/benchmark=trajectory/family=semantic"
+  --output-dir "$DATA/stage=profiles"
 .venv/bin/python -m trajectory.scripts.validate_against_genre \
   /path/to/psalms-browser.csv \
-  "/path/to/tehillim-data/benchmark=trajectory/family=semantic/trajectory_distances.parquet" \
-  --output validation.csv --breakdown-output validation_by_genre.csv
+  "$DATA/stage=profiles/trajectory_distances.parquet" \
+  --output "$DATA/stage=raw/validate_against_genre.csv" \
+  --breakdown-output "$DATA/stage=raw/validate_against_genre_by_genre.csv"
+.venv/bin/python -m trajectory.scripts.export_ui_rows \
+  "$DATA/stage=raw/validate_against_genre.csv" \
+  --breakdown-csv "$DATA/stage=raw/validate_against_genre_by_genre.csv" \
+  --output "$DATA/stage=ui/ui_rows.json" \
+  --breakdown-output "$DATA/stage=ui/ui_rows_by_genre.json"
 ```
 
 ## Usage

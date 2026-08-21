@@ -79,19 +79,19 @@ def test_load_embeddings_matches_a_naive_per_row_to_pylist_conversion(tmp_path: 
 
 
 def test_dataset_identifier_reads_model_and_variation_from_the_hive_path() -> None:
-    path = Path("data/type=semantic/model=bge_m3/variation=vocalized/part-0.parquet")
+    path = Path("data/type=semantic/model=bge_m3/text=vocalized/part-0.parquet")
 
     assert dataset_identifier(path) == "bge_m3_vocalized"
 
 
 def test_dataset_identifier_handles_a_two_level_lexical_path() -> None:
-    path = Path("data/type=lexical/unit=homograph/weight=binary/part-0.parquet")
+    path = Path("data/type=lexical/unit=homograph/construction=binary/part-0.parquet")
 
     assert dataset_identifier(path) == "homograph_binary"
 
 
 def test_dataset_identifier_handles_a_three_level_path_with_an_extra_text_tier() -> None:
-    path = Path("data/type=lexical/unit=word/text=consonantal/weight=binary/part-0.parquet")
+    path = Path("data/type=lexical/unit=word/text=consonantal/construction=binary/part-0.parquet")
 
     assert dataset_identifier(path) == "word_consonantal_binary"
 
@@ -109,7 +109,7 @@ def test_split_model_name_falls_back_to_unknown_variant() -> None:
 
 
 def test_split_model_name_extracts_a_variant_embedded_in_the_middle() -> None:
-    # word_consonantal_binary: unit=word, text=consonantal, weight=binary, tier is not a suffix.
+    # word_consonantal_binary: unit=word, text=consonantal, construction=binary, tier is not a suffix.
     assert split_model_name("word_consonantal_binary") == ("word_binary", "consonantal")
 
 

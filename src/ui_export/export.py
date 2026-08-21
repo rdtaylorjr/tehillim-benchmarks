@@ -99,13 +99,15 @@ def main() -> None:
     args = parser.parse_args()
 
     parallelism_overall_df = pd.read_parquet(
-        args.parallelism_dir / "master" / "model_metrics_overall.parquet"
+        args.parallelism_dir / "stage=master" / "model_metrics_overall.parquet"
     )
     parallelism_by_type_df = pd.read_parquet(
-        args.parallelism_dir / "master" / "model_metrics_by_type.parquet"
+        args.parallelism_dir / "stage=master" / "model_metrics_by_type.parquet"
     )
-    genre_overall_df = pd.read_parquet(args.genre_dir / "master" / "genre_metrics_wide.parquet")
-    genre_by_genre_df = pd.read_csv(args.genre_dir / "by_genre.csv")
+    genre_overall_df = pd.read_parquet(
+        args.genre_dir / "stage=master" / "genre_metrics_wide.parquet"
+    )
+    genre_by_genre_df = pd.read_csv(args.genre_dir / "stage=raw" / "by_genre.csv")
     trajectory_rows = json.loads(args.trajectory_ui_rows.read_text())
     trajectory_by_genre_rows = (
         json.loads(args.trajectory_by_genre_rows.read_text())

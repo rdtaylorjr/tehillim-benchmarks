@@ -1,7 +1,6 @@
 """Joins every metric from compare_models/compare_true_similarity/export_detail into one parquet."""
 
 import argparse
-import shutil
 from pathlib import Path
 
 import pandas as pd
@@ -167,9 +166,6 @@ def main() -> None:
 
     by_type_wide = _pivot_wide(long_df, "type", ["model", "model_base", "text_variant", "scope"])
     by_type_wide.to_parquet(args.output_dir / "model_metrics_by_type.parquet", index=False)
-
-    for name in ("pair_detail.parquet", "baseline_detail.parquet"):
-        shutil.copyfile(args.detail_dir / name, args.output_dir / name)
 
     print(f"model_metrics_long: {len(long_df)} rows")
     print(f"model_metrics_overall: {len(overall_wide)} rows")
