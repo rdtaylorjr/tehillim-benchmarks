@@ -2,9 +2,9 @@ import math
 
 import pandas as pd
 
-from trajectory.scripts.export_dashboard_rows import (
-    trajectory_by_genre_dashboard_rows,
-    trajectory_dashboard_rows,
+from trajectory.scripts.export_ui_rows import (
+    trajectory_by_genre_ui_rows,
+    trajectory_ui_rows,
 )
 
 
@@ -80,23 +80,23 @@ def _validation_df() -> pd.DataFrame:
     )
 
 
-def test_trajectory_dashboard_rows_splits_model_into_base_and_text_variant() -> None:
-    rows = trajectory_dashboard_rows(_validation_df())
+def test_trajectory_ui_rows_splits_model_into_base_and_text_variant() -> None:
+    rows = trajectory_ui_rows(_validation_df())
 
     assert rows[0]["model"] == "bge_m3_vocalized"
     assert rows[0]["model_base"] == "bge_m3"
     assert rows[0]["text_variant"] == "vocalized"
 
 
-def test_trajectory_dashboard_rows_splits_a_consonantal_only_model() -> None:
-    rows = trajectory_dashboard_rows(_validation_df())
+def test_trajectory_ui_rows_splits_a_consonantal_only_model() -> None:
+    rows = trajectory_ui_rows(_validation_df())
 
     assert rows[1]["model_base"] == "miqrabert"
     assert rows[1]["text_variant"] == "consonantal"
 
 
-def test_trajectory_dashboard_rows_carries_metric_and_every_source_field() -> None:
-    rows = trajectory_dashboard_rows(_validation_df())
+def test_trajectory_ui_rows_carries_metric_and_every_source_field() -> None:
+    rows = trajectory_ui_rows(_validation_df())
 
     row = rows[1]
     assert row["metric"] == "structural_distance"
@@ -114,8 +114,8 @@ def test_trajectory_dashboard_rows_carries_metric_and_every_source_field() -> No
     assert row["length_and_content_controlled_q"] == 0.52
 
 
-def test_trajectory_dashboard_rows_preserves_nan_for_the_self_covariate_case() -> None:
-    rows = trajectory_dashboard_rows(_validation_df())
+def test_trajectory_ui_rows_preserves_nan_for_the_self_covariate_case() -> None:
+    rows = trajectory_ui_rows(_validation_df())
 
     row = rows[0]
     assert math.isnan(row["length_and_content_controlled_gap"])
@@ -123,20 +123,20 @@ def test_trajectory_dashboard_rows_preserves_nan_for_the_self_covariate_case() -
     assert math.isnan(row["length_and_content_controlled_q"])
 
 
-def test_trajectory_dashboard_rows_returns_one_row_per_input_row() -> None:
-    assert len(trajectory_dashboard_rows(_validation_df())) == 2
+def test_trajectory_ui_rows_returns_one_row_per_input_row() -> None:
+    assert len(trajectory_ui_rows(_validation_df())) == 2
 
 
-def test_trajectory_by_genre_dashboard_rows_splits_model_into_base_and_text_variant() -> None:
-    rows = trajectory_by_genre_dashboard_rows(_breakdown_df())
+def test_trajectory_by_genre_ui_rows_splits_model_into_base_and_text_variant() -> None:
+    rows = trajectory_by_genre_ui_rows(_breakdown_df())
 
     assert rows[0]["model"] == "bge_m3_vocalized"
     assert rows[0]["model_base"] == "bge_m3"
     assert rows[0]["text_variant"] == "vocalized"
 
 
-def test_trajectory_by_genre_dashboard_rows_carries_every_field() -> None:
-    rows = trajectory_by_genre_dashboard_rows(_breakdown_df())
+def test_trajectory_by_genre_ui_rows_carries_every_field() -> None:
+    rows = trajectory_by_genre_ui_rows(_breakdown_df())
 
     row = rows[1]
     assert row["metric"] == "structural_distance"
@@ -151,5 +151,5 @@ def test_trajectory_by_genre_dashboard_rows_carries_every_field() -> None:
     assert row["maxT_q_by"] == 0.7
 
 
-def test_trajectory_by_genre_dashboard_rows_returns_one_row_per_input_row() -> None:
-    assert len(trajectory_by_genre_dashboard_rows(_breakdown_df())) == 2
+def test_trajectory_by_genre_ui_rows_returns_one_row_per_input_row() -> None:
+    assert len(trajectory_by_genre_ui_rows(_breakdown_df())) == 2

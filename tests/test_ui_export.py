@@ -1,6 +1,6 @@
 import pandas as pd
 
-from dashboard.export import build_family_data
+from ui_export.export import build_family_data
 
 
 def _parallelism_overall_df() -> pd.DataFrame:
@@ -94,7 +94,7 @@ def _trajectory_rows() -> list[dict]:
     return [{"model": "bge_m3_vocalized", "metric": "content_distance", "raw_p": 0.001}]
 
 
-def test_build_family_data_selects_only_the_dashboards_parallelism_overall_columns() -> None:
+def test_build_family_data_selects_only_the_uis_parallelism_overall_columns() -> None:
     data = build_family_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
@@ -254,7 +254,7 @@ def test_build_family_data_passes_trajectory_rows_through_unchanged() -> None:
     assert data["trajectory"] == _trajectory_rows()
 
 
-def test_build_family_data_has_exactly_the_six_dashboard_keys() -> None:
+def test_build_family_data_has_exactly_the_six_ui_keys() -> None:
     data = build_family_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),

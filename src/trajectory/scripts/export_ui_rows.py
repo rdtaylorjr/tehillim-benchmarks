@@ -1,4 +1,4 @@
-"""Converts validate_against_genre.py's validation.csv into the dashboard's JSON row shape."""
+"""Converts validate_against_genre.py's validation.csv into the UI's JSON row shape."""
 
 import argparse
 import json
@@ -24,8 +24,8 @@ _FIELDS = (
 )
 
 
-def trajectory_dashboard_rows(validation_df: pd.DataFrame) -> list[dict]:
-    """One dashboard row per validation.csv row, with model split into model_base/text_variant."""
+def trajectory_ui_rows(validation_df: pd.DataFrame) -> list[dict]:
+    """One UI row per validation.csv row, with model split into model_base/text_variant."""
     rows = []
     for _, row in validation_df.iterrows():
         model_base, text_variant = split_model_name(row["model"])
@@ -54,8 +54,8 @@ _BY_GENRE_FIELDS = (
 )
 
 
-def trajectory_by_genre_dashboard_rows(breakdown_df: pd.DataFrame) -> list[dict]:
-    """One dashboard row per validate_against_genre_by_genre.csv row, model split as above."""
+def trajectory_by_genre_ui_rows(breakdown_df: pd.DataFrame) -> list[dict]:
+    """One UI row per validate_against_genre_by_genre.csv row, model split as above."""
     rows = []
     for _, row in breakdown_df.iterrows():
         model_base, text_variant = split_model_name(row["model"])
@@ -80,13 +80,13 @@ def main() -> None:
     args = parser.parse_args()
 
     validation_df = pd.read_csv(args.validation_csv)
-    rows = trajectory_dashboard_rows(validation_df)
+    rows = trajectory_ui_rows(validation_df)
     args.output.write_text(json.dumps(rows))
     print(f"wrote {len(rows)} rows to {args.output}")
 
     if args.breakdown_csv and args.breakdown_output:
         breakdown_df = pd.read_csv(args.breakdown_csv)
-        breakdown_rows = trajectory_by_genre_dashboard_rows(breakdown_df)
+        breakdown_rows = trajectory_by_genre_ui_rows(breakdown_df)
         args.breakdown_output.write_text(json.dumps(breakdown_rows))
         print(f"wrote {len(breakdown_rows)} by-genre rows to {args.breakdown_output}")
 

@@ -18,7 +18,10 @@ dependencies.
 Every benchmark script's `--output`/`--output-dir` writes into a local
 [tehillim-data](https://github.com/rdtaylorjr/tehillim-data) checkout, kept as a separate repo
 since result Parquet files run tens of megabytes each and bloat a code repo's clone size and
-history. `results.csv` in the examples below is illustrative, point it wherever you check that out.
+history. That checkout is Hive-partitioned the same way as `tehillim-representations`,
+`benchmark={parallelism,genre,trajectory}/family={lexical,semantic}/...`, so point a script's
+`--output`/`--output-dir` at the matching `benchmark=`/`family=` directory. `results.csv` in the
+examples below is illustrative, point it wherever you check that out.
 
 ## Methodology
 
@@ -157,8 +160,8 @@ benchmarks above, through the same evaluation code, no separate pipeline. Two ar
 variants exist for the positional/recurrence weightings: colon-level (each half-verse's vector
 distinct, correct for parallelism's pairwise colon comparison) and psalm-broadcast (one
 whole-psalm vector repeated across its colons, correct for genre's mean-pooled psalm centroid),
-documented in `tehillim-representations`'s README. Parallelism-scoped dashboard tables exclude
-`_psalm`-suffixed models (`dashboard.export._drop_psalm_level_models`), since a broadcast vector is
+documented in `tehillim-representations`'s README. Parallelism-scoped UI tables exclude
+`_psalm`-suffixed models (`ui_export.export._drop_psalm_level_models`), since a broadcast vector is
 architecturally degenerate for a colon-pairwise task. Genre tables keep them.
 
 ### Order-shuffle-null control
@@ -255,9 +258,11 @@ the naive per-pair form does not scale past a few thousand permutations at 150 p
 
 ```bash
 .venv/bin/python -m trajectory.scripts.compute_profiles \
-  /path/to/tehillim-representations/data/type=semantic --output-dir /path/to/tehillim-data/trajectory/semantic
+  /path/to/tehillim-representations/data/type=semantic \
+  --output-dir "/path/to/tehillim-data/benchmark=trajectory/family=semantic"
 .venv/bin/python -m trajectory.scripts.validate_against_genre \
-  /path/to/psalms-browser.csv /path/to/tehillim-data/trajectory/semantic/trajectory_distances.parquet \
+  /path/to/psalms-browser.csv \
+  "/path/to/tehillim-data/benchmark=trajectory/family=semantic/trajectory_distances.parquet" \
   --output validation.csv --breakdown-output validation_by_genre.csv
 ```
 

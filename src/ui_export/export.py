@@ -1,4 +1,4 @@
-"""Selects the results dashboard's required columns from one representation family's results."""
+"""Selects the results UI's required columns from one representation family's results."""
 
 import argparse
 import json
@@ -70,7 +70,7 @@ def build_family_data(
     trajectory_rows: list[dict],
     trajectory_by_genre_rows: list[dict] | None = None,
 ) -> dict:
-    """One family's dashboard payload: the 6 tables the dashboard's tabs render."""
+    """One family's UI payload: the 6 tables the UI's tabs render."""
     parallelism_overall_df = _drop_psalm_level_models(parallelism_overall_df)
     parallelism_by_type_df = _drop_psalm_level_models(parallelism_by_type_df)
     genre_by_genre_df = _add_model_base_and_text_variant(genre_by_genre_df)
@@ -93,7 +93,7 @@ def main() -> None:
     parser.add_argument("family", help="representation family name, e.g. semantic, lexical")
     parser.add_argument("--parallelism-dir", type=Path, required=True)
     parser.add_argument("--genre-dir", type=Path, required=True)
-    parser.add_argument("--trajectory-dashboard-rows", type=Path, required=True)
+    parser.add_argument("--trajectory-ui-rows", type=Path, required=True)
     parser.add_argument("--trajectory-by-genre-rows", type=Path, default=None)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -106,7 +106,7 @@ def main() -> None:
     )
     genre_overall_df = pd.read_parquet(args.genre_dir / "master" / "genre_metrics_wide.parquet")
     genre_by_genre_df = pd.read_csv(args.genre_dir / "by_genre.csv")
-    trajectory_rows = json.loads(args.trajectory_dashboard_rows.read_text())
+    trajectory_rows = json.loads(args.trajectory_ui_rows.read_text())
     trajectory_by_genre_rows = (
         json.loads(args.trajectory_by_genre_rows.read_text())
         if args.trajectory_by_genre_rows
