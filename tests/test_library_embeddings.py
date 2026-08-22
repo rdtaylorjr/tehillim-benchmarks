@@ -4,7 +4,12 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from library.embeddings import dataset_identifier, load_embeddings, split_model_name
+from library.embeddings import (
+    dataset_identifier,
+    load_embeddings,
+    load_sparse_embeddings,
+    split_model_name,
+)
 
 
 def _write_parquet(path: Path, vectors: dict[int, list[float]]) -> None:
@@ -78,6 +83,83 @@ def test_load_embeddings_matches_a_naive_per_row_to_pylist_conversion(tmp_path: 
         np.testing.assert_array_equal(vectorized[node], naive[node])
 
 
+def _write_sparse_parquet(
+    path: Path, sparse_vectors: dict[int, tuple[list[int], list[float]]], dim: int
+) -> None:
+    node_ids = sorted(sparse_vectors)
+    table = pa.table(
+        {
+            "node_id": pa.array(node_ids, type=pa.int32()),
+            "indices": pa.array(
+                [sparse_vectors[n][0] for n in node_ids], type=pa.list_(pa.int32())
+            ),
+            "values": pa.array(
+                [sparse_vectors[n][1] for n in node_ids], type=pa.list_(pa.float32())
+            ),
+        }
+    )
+    table = table.replace_schema_metadata({"dim": str(dim), "sparse": "true"})
+    pq.write_table(table, path)
+
+
+def test_load_sparse_embeddings_reads_a_real_sparse_parquet_file(tmp_path: Path) -> None:
+    path = tmp_path / "sparse.parquet"
+    _write_sparse_parquet(path, {7: ([2, 5000], [1.0, 0.5]), 8: ([9], [2.0])}, dim=74088)
+
+    node_ids, matrix = load_sparse_embeddings(path)
+
+    assert node_ids == [7, 8]
+    assert matrix.shape == (2, 74088)
+    dense = matrix.toarray()
+    assert dense[0, 2] == 1.0
+    assert dense[0, 5000] == 0.5
+    assert dense[1, 9] == 2.0
+    assert np.count_nonzero(dense) == 3
+
+
+def test_load_sparse_embeddings_returns_float32_values(tmp_path: Path) -> None:
+    path = tmp_path / "sparse.parquet"
+    _write_sparse_parquet(path, {1: ([0], [1.0])}, dim=10)
+
+    _, matrix = load_sparse_embeddings(path)
+
+    assert matrix.dtype == np.dtype("<f4")
+
+
+def test_load_sparse_embeddings_excludes_a_row_with_no_nonzero_entries(tmp_path: Path) -> None:
+    path = tmp_path / "sparse.parquet"
+    _write_sparse_parquet(path, {7: ([2], [1.0]), 8: ([], [])}, dim=10)
+
+    node_ids, matrix = load_sparse_embeddings(path)
+
+    assert node_ids == [7]
+    assert matrix.shape == (1, 10)
+
+
+def test_load_sparse_embeddings_matches_a_reconstructed_dense_matrix(tmp_path: Path) -> None:
+    """Proves the CSR construction is lossless against manual dense reconstruction."""
+    rng = np.random.default_rng(0)
+    dim = 500
+    sparse_vectors = {}
+    dense_expected = {}
+    for node in range(100, 110):
+        n_nonzero = rng.integers(1, 6)
+        indices = sorted(rng.choice(dim, size=n_nonzero, replace=False).tolist())
+        values = rng.uniform(0.1, 5.0, size=n_nonzero).tolist()
+        sparse_vectors[node] = (indices, values)
+        dense_row = np.zeros(dim, dtype="<f4")
+        dense_row[indices] = values
+        dense_expected[node] = dense_row
+
+    path = tmp_path / "sparse.parquet"
+    _write_sparse_parquet(path, sparse_vectors, dim=dim)
+
+    node_ids, matrix = load_sparse_embeddings(path)
+
+    for i, node in enumerate(node_ids):
+        np.testing.assert_allclose(matrix[i].toarray().ravel(), dense_expected[node], rtol=1e-6)
+
+
 def test_dataset_identifier_reads_model_and_variation_from_the_hive_path() -> None:
     path = Path("data/type=semantic/model=bge_m3/text=vocalized/part-0.parquet")
 
@@ -109,7 +191,7 @@ def test_split_model_name_falls_back_to_unknown_variant() -> None:
 
 
 def test_split_model_name_extracts_a_variant_embedded_in_the_middle() -> None:
-    # word_consonantal_binary: unit=word, text=consonantal, construction=binary, tier is not a suffix.
+    # word_consonantal_binary: unit=word, text=consonantal, construction=binary, not a suffix.
     assert split_model_name("word_consonantal_binary") == ("word_binary", "consonantal")
 
 

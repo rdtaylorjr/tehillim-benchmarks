@@ -7,21 +7,23 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import scipy.sparse as sp
 
 from genre.bootstrap import (
     block_bootstrap_genre_ap_gap_and_auc,
     build_similarity_and_genre_matrices,
 )
-from genre.evaluate import evaluate_genre_discrimination
+from genre.evaluate import evaluate_genre_discrimination_from_matrix
 from genre.genre_labels import load_genre_by_psalm
 from genre.pairs import GenrePair, build_genre_pairs, filter_pairs_by_genre
 from genre.permutation import joint_psalm_label_permutation_test, one_vs_rest_masks
 from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verses_by_psalm, load_bhsa_api
-from library.calibration import background_similarity_stats
+from library.calibration import background_stats_from_matrix
 from library.centroid import psalm_centroids
 from library.embeddings import dataset_identifier, load_embeddings
 from library.incremental_cache import load_cached_rows as _load_cached_rows
 from library.multiple_comparisons import add_fdr_q_values
+from library.retrieval_metrics import sparse_cosine_similarity_matrix
 
 _SOURCES = ("naive", "perm", "maxT")
 _RAW_COLUMNS = (
@@ -43,23 +45,21 @@ _RAW_COLUMNS = (
 )
 
 
-def compare_model_across_genres(
+def _compare_from_similarity_matrix(
     model: str,
     psalm_ids: list[int],
-    psalm_vectors: dict[int, np.ndarray],
+    similarity_matrix: np.ndarray,
     genre_by_psalm: dict[int, str],
     genres: tuple[str, ...],
     pairs: list[GenrePair],
     n_permutations: int,
     n_resamples: int,
     seed: int,
-) -> list[dict]:
-    """One row per genre: AP (point, unchanged), AUC, jackknife CIs, and three p-value sources."""
-    similarity_matrix, _ = build_similarity_and_genre_matrices(
-        psalm_ids, psalm_vectors, genre_by_psalm
-    )
+) -> list[dict[str, str | int | float]]:
+    """Shared per-genre report step for both the dense and sparse psalm-vector entry points."""
+    psalm_index = {p: i for i, p in enumerate(psalm_ids)}
     genre_codes = np.array([genres.index(genre_by_psalm[p]) for p in psalm_ids])
-    background = background_similarity_stats(np.stack([psalm_vectors[p] for p in psalm_ids]))
+    background = background_stats_from_matrix(similarity_matrix)
 
     perm_result = joint_psalm_label_permutation_test(
         similarity_matrix,
@@ -69,10 +69,12 @@ def compare_model_across_genres(
         rng=np.random.default_rng(seed),
     )
 
-    rows = []
+    rows: list[dict[str, str | int | float]] = []
     for index, genre in enumerate(genres):
         restricted = filter_pairs_by_genre(pairs, genre)
-        report = evaluate_genre_discrimination(restricted, psalm_vectors)
+        report = evaluate_genre_discrimination_from_matrix(
+            restricted, similarity_matrix, psalm_index
+        )
 
         same_mask, population_mask = one_vs_rest_masks(genre_codes, index)
         ci = block_bootstrap_genre_ap_gap_and_auc(
@@ -105,6 +107,60 @@ def compare_model_across_genres(
             }
         )
     return rows
+
+
+def compare_model_across_genres(
+    model: str,
+    psalm_ids: list[int],
+    psalm_vectors: dict[int, np.ndarray],
+    genre_by_psalm: dict[int, str],
+    genres: tuple[str, ...],
+    pairs: list[GenrePair],
+    n_permutations: int,
+    n_resamples: int,
+    seed: int,
+) -> list[dict[str, str | int | float]]:
+    """One row per genre: AP (point, unchanged), AUC, jackknife CIs, and three p-value sources."""
+    similarity_matrix, _ = build_similarity_and_genre_matrices(
+        psalm_ids, psalm_vectors, genre_by_psalm
+    )
+    return _compare_from_similarity_matrix(
+        model,
+        psalm_ids,
+        similarity_matrix,
+        genre_by_psalm,
+        genres,
+        pairs,
+        n_permutations,
+        n_resamples,
+        seed,
+    )
+
+
+def compare_model_across_genres_sparse(
+    model: str,
+    psalm_ids: list[int],
+    psalm_vectors: sp.csr_matrix,
+    genre_by_psalm: dict[int, str],
+    genres: tuple[str, ...],
+    pairs: list[GenrePair],
+    n_permutations: int,
+    n_resamples: int,
+    seed: int,
+) -> list[dict[str, str | int | float]]:
+    """Same rows as compare_model_across_genres, comparing sparse psalm vectors, never densified."""
+    similarity_matrix = sparse_cosine_similarity_matrix(psalm_vectors, psalm_vectors)
+    return _compare_from_similarity_matrix(
+        model,
+        psalm_ids,
+        similarity_matrix,
+        genre_by_psalm,
+        genres,
+        pairs,
+        n_permutations,
+        n_resamples,
+        seed,
+    )
 
 
 def load_cached_rows(cache_path: Path) -> tuple[list[dict], set[str]]:

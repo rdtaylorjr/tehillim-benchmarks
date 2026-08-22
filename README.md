@@ -203,12 +203,40 @@ BHSA clone, rather than floating on `"latest"`. `parallelism.tf_features.load_ap
 `_TEHILLIM_PARALLELISM_CHECKOUT = "v1.0"` for the `rdtaylorjr/tehillim-parallelism`
 module, since that module has an independent release history and cannot share BHSA's pin.
 
-`library.bhsa.load_bhsa_api` runs Text-Fabric's `use()` with a 30-second timeout
-(`DEFAULT_USE_TIMEOUT_SECONDS`), since `use()` re-verifies its release against GitHub's API even
-when the data is fully cached locally, and can stall or back off for minutes under a GitHub rate
-limit. Past that timeout, or on any other failure, it falls back to a full local BHSA clone at
-`~/Developer/hebrew/bhsa/tf/2021`, the same clone `tehillim-representations` reads from, never
-touching the network.
+`library.bhsa.load_bhsa_api` tries the local BHSA clone at `~/Developer/hebrew/bhsa/tf/2021` first,
+the same clone `tehillim-representations` reads from. Only if that fails does it fall back to
+Text-Fabric's `use()`, with a 30-second timeout (`DEFAULT_USE_TIMEOUT_SECONDS`), since `use()`
+re-verifies its release against GitHub's API even when the data is fully cached locally, and can
+stall or back off for minutes under a GitHub rate limit.
+
+## Morphological benchmark
+
+`tehillim-representations` also ships morphological representations (`data/type=morphological/`),
+built from BHSA's word-level grammatical features (part of speech, agreement, verbal stem/tense,
+pronominal-suffix morphology) rather than lexical identity or a learned embedding model. They
+score against the same parallelism and genre benchmarks above, through the same evaluation code, no
+separate pipeline, with the same colon-level/psalm-broadcast split as the lexical family
+(`_psalm`-suffixed models excluded from parallelism-scoped UI tables, kept for genre). One
+representation, `morph_suffix_posmean` (psalm-scale deployment), has no colon-level form at all and
+isn't marked by the `_psalm` naming convention, so it's excluded from parallelism scoring entirely
+rather than relying on `_drop_psalm_level_models` to catch it.
+
+### Sparse embedding scoring
+
+One morphological representation, `morph_signature`'s trigram construction, has 75,894 dimensions
+with at most a few dozen nonzero entries per colon, and is stored sparse
+(`node_id`/`indices`/`values` Parquet schema, `sparse=true` in the file's schema metadata) rather
+than as a dense `vector` column, to avoid materializing a mostly-zero array per colon.
+`library.embeddings.load_sparse_embeddings` reads it into a `scipy.sparse.csr_matrix`, and
+`library.retrieval_metrics.sparse_cosine_similarity_matrix`,
+`parallelism.evaluate.build_side_vectors_sparse`/`run_evaluation_sparse`, and
+`library.centroid.sparse_psalm_centroids` with
+`genre.evaluate.evaluate_genre_discrimination_sparse`/`genre.scripts.compare_by_genre.compare_model_across_genres_sparse`
+score it without ever densifying the vectors, only the small model-sized similarity matrix each
+produces. The standard comparison scripts (`compare_models.py`, `compare_calibrated.py`,
+`compute_bootstrap_cis.py`, `compare_true_similarity.py`, both `export_detail.py` scripts) read
+only the dense schema and do not dispatch to this path; scoring the sparse trigram family currently
+requires calling the sparse functions directly.
 
 ## Structural trajectory analysis
 

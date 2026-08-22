@@ -1,11 +1,13 @@
 import numpy as np
 import pandas as pd
 import pytest
+import scipy.sparse as sp
 
 from genre.pairs import build_genre_pairs
 from genre.scripts.compare_by_genre import (
     add_fdr_columns,
     compare_model_across_genres,
+    compare_model_across_genres_sparse,
     load_cached_rows,
 )
 
@@ -117,6 +119,38 @@ class TestCompareModelAcrossGenres:
             restricted = filter_pairs_by_genre(pairs, row["genre"])
             expected = evaluate_genre_discrimination(restricted, psalm_vectors)
             assert row["average_precision"] == pytest.approx(expected.average_precision)
+
+
+class TestCompareModelAcrossGenresSparse:
+    def test_matches_the_dense_function_exactly(self) -> None:
+        """Proves the sparse psalm-similarity path reports identically to the dense one."""
+        psalm_ids, psalm_vectors, genre_by_psalm, genres, pairs = _fixture()
+        sparse_matrix = sp.csr_matrix(np.stack([psalm_vectors[p] for p in psalm_ids]))
+
+        dense_rows = compare_model_across_genres(
+            "model_a",
+            psalm_ids,
+            psalm_vectors,
+            genre_by_psalm,
+            genres,
+            pairs,
+            n_permutations=50,
+            n_resamples=50,
+            seed=0,
+        )
+        sparse_rows = compare_model_across_genres_sparse(
+            "model_a",
+            psalm_ids,
+            sparse_matrix,
+            genre_by_psalm,
+            genres,
+            pairs,
+            n_permutations=50,
+            n_resamples=50,
+            seed=0,
+        )
+
+        assert sparse_rows == dense_rows
 
 
 def _rows_for_two_genres() -> list[dict]:

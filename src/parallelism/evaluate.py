@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
+import scipy.sparse as sp
 
 from library.bhsa import DEFAULT_CHECKOUT
 from library.embeddings import load_embeddings
@@ -15,8 +16,9 @@ from library.retrieval_metrics import (
     cosine_similarity_matrix,
     mean_reciprocal_rank,
     paired_discrimination_test,
+    ranks_from_similarity_matrix,
     recall_at_k,
-    retrieval_ranks,
+    sparse_cosine_similarity_matrix,
     stratified_mean_gap_test,
 )
 from parallelism.pairs import RetrievalPair, build_retrieval_pairs
@@ -41,6 +43,27 @@ def build_side_vectors(
     np.add.at(sums, group_ids, flat_vectors)
     counts = np.bincount(group_ids, minlength=len(node_lists))
     return sums / counts[:, None]
+
+
+def build_side_vectors_sparse(
+    pairs: list[RetrievalPair], side: str, node_ids: list[int], node_vectors: sp.csr_matrix
+) -> sp.csr_matrix:
+    """Sparse mean-pool analogue of build_side_vectors: pools via matmul, never densifies."""
+    node_index = {n: i for i, n in enumerate(node_ids)}
+    node_lists = [getattr(p, f"{side}_nodes") for p in pairs]
+    missing = sorted({n for nodes in node_lists for n in nodes} - set(node_index))
+    if missing:
+        shown = missing[:10]
+        suffix = "..." if len(missing) > 10 else ""
+        raise ValueError(f"embedding file is missing {len(missing)} node id(s): {shown}{suffix}")
+    row_lengths = np.array([len(nodes) for nodes in node_lists])
+    group_ids = np.repeat(np.arange(len(node_lists)), row_lengths)
+    flat_cols = np.array([node_index[n] for nodes in node_lists for n in nodes])
+    weights = 1.0 / np.repeat(row_lengths, row_lengths)
+    pooling = sp.csr_matrix(
+        (weights, (group_ids, flat_cols)), shape=(len(node_lists), len(node_ids))
+    )
+    return sp.csr_matrix(pooling @ node_vectors)
 
 
 @dataclass
@@ -74,22 +97,19 @@ class EvaluationReport:
     recall_at_10_backward: float
 
 
-def run_evaluation(
+def _report_from_pair_similarities(
     pairs: list[RetrievalPair],
-    node_vectors: dict[int, np.ndarray],
-    n_permutations: int = 10000,
-    rng: np.random.Generator | None = None,
+    similarities: np.ndarray,
+    n_permutations: int,
+    rng: np.random.Generator,
 ) -> EvaluationReport:
-    """Runs bidirectional retrieval, discrimination, and type-stratified tests for one model."""
-    rng = rng if rng is not None else np.random.default_rng()
+    """Shared retrieval/discrimination/type-stratified report step for the dense and sparse paths"""
     pair_ids = [p.pair_id for p in pairs]
-    source_vecs = build_side_vectors(pairs, "source", node_vectors)
-    target_vecs = build_side_vectors(pairs, "target", node_vectors)
+    ranks_forward = ranks_from_similarity_matrix(similarities, pair_ids, true_target_ids=pair_ids)
+    ranks_backward = ranks_from_similarity_matrix(
+        similarities.T, pair_ids, true_target_ids=pair_ids
+    )
 
-    ranks_forward = retrieval_ranks(source_vecs, target_vecs, pair_ids, true_target_ids=pair_ids)
-    ranks_backward = retrieval_ranks(target_vecs, source_vecs, pair_ids, true_target_ids=pair_ids)
-
-    similarities = cosine_similarity_matrix(source_vecs, target_vecs)
     n = len(pair_ids)
     true_similarities = np.diag(similarities)
     off_diagonal = ~np.eye(n, dtype=bool)
@@ -137,6 +157,35 @@ def run_evaluation(
         recall_at_5_backward=recall_at_k(ranks_backward, 5),
         recall_at_10_backward=recall_at_k(ranks_backward, 10),
     )
+
+
+def run_evaluation(
+    pairs: list[RetrievalPair],
+    node_vectors: dict[int, np.ndarray],
+    n_permutations: int = 10000,
+    rng: np.random.Generator | None = None,
+) -> EvaluationReport:
+    """Runs bidirectional retrieval, discrimination, and type-stratified tests for one model."""
+    rng = rng if rng is not None else np.random.default_rng()
+    source_vecs = build_side_vectors(pairs, "source", node_vectors)
+    target_vecs = build_side_vectors(pairs, "target", node_vectors)
+    similarities = cosine_similarity_matrix(source_vecs, target_vecs)
+    return _report_from_pair_similarities(pairs, similarities, n_permutations, rng)
+
+
+def run_evaluation_sparse(
+    pairs: list[RetrievalPair],
+    node_ids: list[int],
+    node_vectors: sp.csr_matrix,
+    n_permutations: int = 10000,
+    rng: np.random.Generator | None = None,
+) -> EvaluationReport:
+    """Same report as run_evaluation, pooling and comparing sparse vectors without densifying."""
+    rng = rng if rng is not None else np.random.default_rng()
+    source_vecs = build_side_vectors_sparse(pairs, "source", node_ids, node_vectors)
+    target_vecs = build_side_vectors_sparse(pairs, "target", node_ids, node_vectors)
+    similarities = sparse_cosine_similarity_matrix(source_vecs, target_vecs)
+    return _report_from_pair_similarities(pairs, similarities, n_permutations, rng)
 
 
 def main() -> None:

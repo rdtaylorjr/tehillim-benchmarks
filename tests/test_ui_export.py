@@ -144,6 +144,34 @@ def test_build_family_data_drops_psalm_level_models_from_parallelism_overall() -
     assert models == {"bge_m3_vocalized"}
 
 
+def test_build_family_data_drops_psalm_level_shuffle_control_models_from_parallelism_overall() -> (
+    None
+):
+    """A _psalm_shuffleNN model is just as degenerate as its unshuffled _psalm base."""
+    parallelism_overall = _parallelism_overall_df()
+    parallelism_overall.loc[len(parallelism_overall)] = {
+        "model": "morph_signature_1_2gram_psalm_shuffle03",
+        "model_base": "morph_signature_1_2gram_psalm_shuffle03",
+        "text_variant": "unknown",
+        "separation_auc": 0.995,
+        "average_precision": 0.99,
+        "calibrated_effect_size": 5.0,
+        "mrr_forward": 0.9,
+        "n_true": 1110.0,
+        "unused_column": "should be dropped",
+    }
+    data = build_family_data(
+        parallelism_overall,
+        _parallelism_by_type_df(),
+        _genre_overall_df(),
+        _genre_by_genre_df(),
+        _trajectory_rows(),
+    )
+
+    models = {row["model"] for row in data["parallelism_overall"]}
+    assert "morph_signature_1_2gram_psalm_shuffle03" not in models
+
+
 def test_build_family_data_drops_psalm_level_models_from_parallelism_by_type() -> None:
     data = build_family_data(
         _parallelism_overall_df(),

@@ -48,9 +48,12 @@ _GENRE_BY_GENRE_COLUMNS = [
 ]
 
 
+_PSALM_LEVEL_MODEL = r"_psalm(?:_shuffle\d+)?$"
+
+
 def _drop_psalm_level_models(df: pd.DataFrame) -> pd.DataFrame:
-    """Excludes _psalm-suffixed models: degenerate for a colon-pair task, only right for genre."""
-    return df[~df["model"].str.endswith("_psalm")]
+    """Excludes _psalm[_shuffleNN]-suffixed models: degenerate for a colon-pair task."""
+    return df[~df["model"].str.contains(_PSALM_LEVEL_MODEL, regex=True)]
 
 
 def _add_model_base_and_text_variant(df: pd.DataFrame) -> pd.DataFrame:

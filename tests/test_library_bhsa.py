@@ -24,6 +24,15 @@ def _fake_fabric_class(api: object):
     return fake_fabric_class
 
 
+def _raising_fabric_class(exc: Exception):
+    """A fabric_class stand-in whose construction raises, simulating a missing local clone."""
+
+    def fake_fabric_class(*, locations: list[str], silent: str) -> object:
+        raise exc
+
+    return fake_fabric_class
+
+
 class _FakeOtype:
     def __init__(self, book_types: dict[int, str]) -> None:
         self._book_types = book_types
@@ -82,15 +91,54 @@ def _api_with_two_psalms() -> _FakeApi:
 
 
 class TestLoadBhsaApi:
-    def test_returns_the_api_from_a_successful_use_call(self) -> None:
+    def test_returns_the_api_from_a_successful_local_clone_load(self) -> None:
+        local_api = object()
+
+        result = load_bhsa_api(fabric_class=_fake_fabric_class(local_api))
+
+        assert result is local_api
+
+    def test_does_not_call_use_when_the_local_clone_succeeds(self) -> None:
+        local_api = object()
+        use_calls = []
+
+        def tracking_use(*a: object, **k: object) -> object:
+            use_calls.append((a, k))
+            raise AssertionError("use() should not be called when the local clone succeeds")
+
+        load_bhsa_api(use_fn=tracking_use, fabric_class=_fake_fabric_class(local_api))
+
+        assert use_calls == []
+
+    def test_falls_back_to_use_when_the_local_clone_raises(self) -> None:
+        fallback_api = object()
+
         class _FakeApp:
-            api = object()
+            api = fallback_api
 
-        result = load_bhsa_api(use_fn=lambda *a, **k: _FakeApp())
+        result = load_bhsa_api(
+            use_fn=lambda *a, **k: _FakeApp(),
+            fabric_class=_raising_fabric_class(RuntimeError("no local clone")),
+            timeout_seconds=1.0,
+        )
 
-        assert result is _FakeApp.api
+        assert result is fallback_api
 
-    def test_passes_checkout_and_mod_through_to_use(self) -> None:
+    def test_falls_back_to_use_when_the_local_loadall_returns_none(self) -> None:
+        fallback_api = object()
+
+        class _FakeApp:
+            api = fallback_api
+
+        result = load_bhsa_api(
+            use_fn=lambda *a, **k: _FakeApp(),
+            fabric_class=_fake_fabric_class(None),
+            timeout_seconds=1.0,
+        )
+
+        assert result is fallback_api
+
+    def test_passes_checkout_and_mod_through_to_use_during_fallback(self) -> None:
         calls = []
 
         def fake_use(name: str, *, checkout: str, mod: str | None, silent: str) -> object:
@@ -101,62 +149,32 @@ class TestLoadBhsaApi:
 
             return _FakeApp()
 
-        load_bhsa_api(checkout="v1.0", mod="org/repo/tf:v1.0", use_fn=fake_use)
+        load_bhsa_api(
+            checkout="v1.0",
+            mod="org/repo/tf:v1.0",
+            use_fn=fake_use,
+            fabric_class=_raising_fabric_class(RuntimeError("no local clone")),
+        )
 
         assert calls == [("etcbc/bhsa", "v1.0", "org/repo/tf:v1.0")]
 
-    def test_falls_back_to_the_local_clone_when_use_returns_none(self) -> None:
-        fallback_api = object()
-
-        result = load_bhsa_api(
-            use_fn=lambda *a, **k: None,
-            fabric_class=_fake_fabric_class(fallback_api),
-            timeout_seconds=1.0,
-        )
-
-        assert result is fallback_api
-
-    def test_falls_back_to_the_local_clone_when_the_app_has_no_api(self) -> None:
-        class _FakeApp:
-            api = None
-
-        fallback_api = object()
-
-        result = load_bhsa_api(
-            use_fn=lambda *a, **k: _FakeApp(),
-            fabric_class=_fake_fabric_class(fallback_api),
-            timeout_seconds=1.0,
-        )
-
-        assert result is fallback_api
-
-    def test_falls_back_to_the_local_clone_when_use_raises(self) -> None:
-        def raising_use(*a: object, **k: object) -> object:
-            raise ConnectionError("no internet")
-
-        fallback_api = object()
-
-        result = load_bhsa_api(
-            use_fn=raising_use, fabric_class=_fake_fabric_class(fallback_api), timeout_seconds=1.0
-        )
-
-        assert result is fallback_api
-
-    def test_falls_back_to_the_local_clone_when_use_does_not_return_within_the_timeout(
+    def test_falls_back_to_use_and_waits_up_to_the_timeout_when_the_local_clone_fails(
         self,
     ) -> None:
-        def slow_use(*a: object, **k: object) -> object:
-            time.sleep(0.3)
+        fallback_api = object()
+
+        def slow_but_in_time_use(*a: object, **k: object) -> object:
+            time.sleep(0.05)
 
             class _FakeApp:
-                api = object()
+                api = fallback_api
 
             return _FakeApp()
 
-        fallback_api = object()
-
         result = load_bhsa_api(
-            use_fn=slow_use, fabric_class=_fake_fabric_class(fallback_api), timeout_seconds=0.05
+            use_fn=slow_but_in_time_use,
+            fabric_class=_raising_fabric_class(RuntimeError("no local clone")),
+            timeout_seconds=1.0,
         )
 
         assert result is fallback_api
@@ -168,13 +186,16 @@ class TestLoadBhsaApi:
             time.sleep(0.3)
             return None
 
-        load_bhsa_api(
-            use_fn=slow_use, fabric_class=_fake_fabric_class(object()), timeout_seconds=0.05
-        )
+        with pytest.raises(RuntimeError, match="Text-Fabric failed"):
+            load_bhsa_api(
+                use_fn=slow_use,
+                fabric_class=_raising_fabric_class(RuntimeError("no local clone")),
+                timeout_seconds=0.05,
+            )
 
         assert time.monotonic() - started < 0.2
 
-    def test_passes_the_mod_org_and_repo_to_the_fallback_locations(self) -> None:
+    def test_passes_the_mod_org_and_repo_to_the_local_clone_locations(self) -> None:
         captured_locations = []
 
         def fake_fabric_class(*, locations: list[str], silent: str) -> object:
@@ -186,28 +207,16 @@ class TestLoadBhsaApi:
 
             return _FakeTF()
 
-        load_bhsa_api(
-            mod="rdtaylorjr/tehillim-parallelism/tf:v1.0",
-            use_fn=lambda *a, **k: None,
-            fabric_class=fake_fabric_class,
-            timeout_seconds=1.0,
-        )
+        load_bhsa_api(mod="rdtaylorjr/tehillim-parallelism/tf:v1.0", fabric_class=fake_fabric_class)
 
         assert len(captured_locations) == 1
         assert len(captured_locations[0]) == 2
 
-    def test_raises_when_both_use_and_the_local_fallback_fail(self) -> None:
-        def failing_fabric_class(*, locations: list[str], silent: str) -> object:
-            class _FakeTF:
-                def loadAll(self, silent: str) -> object:  # noqa: N802
-                    return None
-
-            return _FakeTF()
-
+    def test_raises_when_both_the_local_clone_and_use_fail(self) -> None:
         with pytest.raises(RuntimeError, match="Text-Fabric failed"):
             load_bhsa_api(
                 use_fn=lambda *a, **k: None,
-                fabric_class=failing_fabric_class,
+                fabric_class=_raising_fabric_class(RuntimeError("no local clone")),
                 timeout_seconds=1.0,
             )
 

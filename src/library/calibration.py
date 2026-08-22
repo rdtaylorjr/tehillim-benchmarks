@@ -12,15 +12,20 @@ class BackgroundStats:
     n_vectors: int
 
 
+def background_stats_from_matrix(similarity_matrix: np.ndarray) -> BackgroundStats:
+    """Same statistic as background_similarity_stats, from an already-computed matrix."""
+    n = similarity_matrix.shape[0]
+    off_diagonal = similarity_matrix[~np.eye(n, dtype=bool)]
+    return BackgroundStats(
+        mean=float(off_diagonal.mean()), std=float(off_diagonal.std()), n_vectors=n
+    )
+
+
 def background_similarity_stats(vectors: np.ndarray) -> BackgroundStats:
     """Mean/std cosine similarity across every distinct pair among vectors, self-pairs excluded."""
     norm = vectors / np.linalg.norm(vectors, axis=1, keepdims=True)
     similarities = norm @ norm.T
-    n = similarities.shape[0]
-    off_diagonal = similarities[~np.eye(n, dtype=bool)]
-    return BackgroundStats(
-        mean=float(off_diagonal.mean()), std=float(off_diagonal.std()), n_vectors=n
-    )
+    return background_stats_from_matrix(similarities)
 
 
 def calibrated_z_score(value: float, background: BackgroundStats) -> float:

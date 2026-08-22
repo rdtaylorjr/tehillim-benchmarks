@@ -1,4 +1,4 @@
-"""Loads BHSA via Text-Fabric's use(), falling back to the local clone if that stalls."""
+"""Loads BHSA from the local clone first, falling back to Text-Fabric's use() if that fails."""
 
 import queue
 import threading
@@ -66,13 +66,16 @@ def load_bhsa_api(
     fabric_class: Callable[..., Any] = _real_fabric_class,
     timeout_seconds: float = DEFAULT_USE_TIMEOUT_SECONDS,
 ) -> Any:
-    """Loads BHSA plus an optional companion module via use(); falls back to the local clone."""
-    app = _call_with_timeout(
-        use_fn, timeout_seconds, "etcbc/bhsa", checkout=checkout, mod=mod, silent="deep"
-    )
-    api = app.api if app is not None else None
-    if api is None:
+    """Loads BHSA plus an optional companion module from the local clone; falls back to use()."""
+    try:
         api = _load_from_local_clone(mod, fabric_class)
+    except Exception:
+        api = None
+    if api is None:
+        app = _call_with_timeout(
+            use_fn, timeout_seconds, "etcbc/bhsa", checkout=checkout, mod=mod, silent="deep"
+        )
+        api = app.api if app is not None else None
     if api is None:
         raise RuntimeError(f"Text-Fabric failed to load BHSA (checkout={checkout!r}, mod={mod!r})")
     return api

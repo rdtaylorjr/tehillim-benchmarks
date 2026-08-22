@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import scipy.sparse as sp
 
 from library.retrieval_metrics import (
     _combine_by_stratum,
@@ -12,8 +13,10 @@ from library.retrieval_metrics import (
     paired_bootstrap_mrr_diff,
     paired_cosine_similarity,
     paired_discrimination_test,
+    ranks_from_similarity_matrix,
     recall_at_k,
     retrieval_ranks,
+    sparse_cosine_similarity_matrix,
     stratified_mean_gap_test,
 )
 
@@ -74,6 +77,41 @@ def test_cosine_similarity_matrix_raises_on_a_zero_vector() -> None:
         cosine_similarity_matrix(a, b)
 
 
+def test_sparse_cosine_similarity_matrix_of_identical_unit_vectors_is_one() -> None:
+    a = sp.csr_matrix(np.array([[1.0, 0.0]]))
+    b = sp.csr_matrix(np.array([[1.0, 0.0]]))
+    result = sparse_cosine_similarity_matrix(a, b)
+    assert result[0, 0] == pytest.approx(1.0)
+
+
+def test_sparse_cosine_similarity_matrix_raises_on_a_zero_vector() -> None:
+    a = sp.csr_matrix(np.array([[0.0, 0.0]]))
+    b = sp.csr_matrix(np.array([[1.0, 0.0]]))
+    with pytest.raises(ValueError, match="zero"):
+        sparse_cosine_similarity_matrix(a, b)
+
+
+def test_sparse_cosine_similarity_matrix_matches_the_dense_function_exactly() -> None:
+    """Proves row-normalize-then-matmul over sparse inputs gives the identical dense result."""
+    rng = np.random.default_rng(0)
+    dim = 500
+    a_dense = np.zeros((6, dim))
+    b_dense = np.zeros((4, dim))
+    for row in a_dense:
+        n_nonzero = rng.integers(1, 6)
+        idx = rng.choice(dim, size=n_nonzero, replace=False)
+        row[idx] = rng.uniform(0.1, 5.0, size=n_nonzero)
+    for row in b_dense:
+        n_nonzero = rng.integers(1, 6)
+        idx = rng.choice(dim, size=n_nonzero, replace=False)
+        row[idx] = rng.uniform(0.1, 5.0, size=n_nonzero)
+
+    expected = cosine_similarity_matrix(a_dense, b_dense)
+    actual = sparse_cosine_similarity_matrix(sp.csr_matrix(a_dense), sp.csr_matrix(b_dense))
+
+    np.testing.assert_allclose(actual, expected, rtol=1e-6)
+
+
 def test_retrieval_ranks_gives_rank_one_when_true_target_is_most_similar() -> None:
     anchors = np.array([[1.0, 0.0]])
     pool = np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]])
@@ -118,6 +156,37 @@ def test_retrieval_ranks_matches_a_naive_per_row_rankdata_loop_at_scale() -> Non
     vectorized = retrieval_ranks(anchors, pool, pool_ids, true_target_ids)
 
     assert vectorized == naive
+
+
+def test_ranks_from_similarity_matrix_matches_retrieval_ranks_exactly() -> None:
+    """retrieval_ranks must be exactly reproducible by computing the matrix once and reusing it."""
+    anchors = np.array([[1.0, 0.0], [0.9, 0.1], [-1.0, 0.3]])
+    pool = np.array([[1.0, 0.0], [0.0, 1.0], [-1.0, 0.0]])
+    pool_ids = ["a", "b", "c"]
+    true_target_ids = ["b", "a", "c"]
+
+    from_scratch = retrieval_ranks(anchors, pool, pool_ids, true_target_ids)
+    similarities = cosine_similarity_matrix(anchors, pool)
+    from_matrix = ranks_from_similarity_matrix(similarities, pool_ids, true_target_ids)
+
+    assert from_matrix == from_scratch
+
+
+def test_ranks_from_similarity_matrix_supports_the_transposed_backward_direction() -> None:
+    """The backward direction's ranks equal ranks_from_similarity_matrix on the transpose."""
+    source = np.array([[1.0, 0.0], [0.2, 0.9]])
+    target = np.array([[1.0, 0.0], [0.0, 1.0]])
+    ids = ["s0", "s1"]
+
+    forward_from_scratch = retrieval_ranks(source, target, ids, true_target_ids=ids)
+    backward_from_scratch = retrieval_ranks(target, source, ids, true_target_ids=ids)
+
+    similarities = cosine_similarity_matrix(source, target)
+    forward = ranks_from_similarity_matrix(similarities, ids, true_target_ids=ids)
+    backward = ranks_from_similarity_matrix(similarities.T, ids, true_target_ids=ids)
+
+    assert forward == forward_from_scratch
+    assert backward == backward_from_scratch
 
 
 def test_outranking_candidates_is_empty_when_true_target_ranks_first() -> None:

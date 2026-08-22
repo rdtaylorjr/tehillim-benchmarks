@@ -18,7 +18,7 @@ from library.incremental_cache import load_cached_parquet_set
 from library.retrieval_metrics import (
     cosine_similarity_matrix,
     paired_cosine_similarity,
-    retrieval_ranks,
+    ranks_from_similarity_matrix,
 )
 from parallelism.baseline import build_unmarked_bicola
 from parallelism.evaluate import build_side_vectors
@@ -63,8 +63,10 @@ def build_pair_detail_rows(
 
     similarities = cosine_similarity_matrix(source_vecs, target_vecs)
     true_similarities = np.diag(similarities)
-    ranks_forward = retrieval_ranks(source_vecs, target_vecs, pair_ids, true_target_ids=pair_ids)
-    ranks_backward = retrieval_ranks(target_vecs, source_vecs, pair_ids, true_target_ids=pair_ids)
+    ranks_forward = ranks_from_similarity_matrix(similarities, pair_ids, true_target_ids=pair_ids)
+    ranks_backward = ranks_from_similarity_matrix(
+        similarities.T, pair_ids, true_target_ids=pair_ids
+    )
 
     rows = []
     for pair, sim, rank_f, rank_b in zip(

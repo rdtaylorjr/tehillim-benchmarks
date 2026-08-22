@@ -14,7 +14,7 @@ from genre.bootstrap import (
 )
 from genre.genre_labels import load_genre_by_psalm
 from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verses_by_psalm, load_bhsa_api
-from library.calibration import background_similarity_stats
+from library.calibration import background_stats_from_matrix
 from library.centroid import psalm_centroids
 from library.embeddings import dataset_identifier, load_embeddings
 from library.incremental_cache import load_cached_rows
@@ -79,7 +79,7 @@ def main() -> None:
         similarity_matrix, genre_match_matrix = build_similarity_and_genre_matrices(
             psalm_ids, psalm_vectors, genre_by_psalm
         )
-        background = background_similarity_stats(np.stack([psalm_vectors[p] for p in psalm_ids]))
+        background = background_stats_from_matrix(similarity_matrix)
 
         rng = np.random.default_rng(args.seed)
         try:

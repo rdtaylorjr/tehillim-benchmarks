@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from typing import NamedTuple
 
 import numpy as np
+import scipy.sparse as sp
 from scipy.stats import rankdata, wilcoxon
 
 
@@ -35,11 +36,35 @@ def cosine_similarity_matrix(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     return np.asarray((a / a_norm) @ (b / b_norm).T)
 
 
+def sparse_cosine_similarity_matrix(a: sp.csr_matrix, b: sp.csr_matrix) -> np.ndarray:
+    """Same semantics as cosine_similarity_matrix, but a and b are sparse and never densified."""
+    a_norm = np.sqrt(np.asarray(a.multiply(a).sum(axis=1))).ravel()
+    b_norm = np.sqrt(np.asarray(b.multiply(b).sum(axis=1))).ravel()
+    if np.any(a_norm == 0) or np.any(b_norm == 0):
+        raise ValueError("cannot compute cosine similarity for a zero vector")
+    a_normalized = sp.diags(1.0 / a_norm) @ a
+    b_normalized = sp.diags(1.0 / b_norm) @ b
+    return np.asarray((a_normalized @ b_normalized.T).toarray())
+
+
 def paired_cosine_similarity(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     """Cosine similarity of a[i] against b[i] only, never any other row."""
     a_norm = a / np.linalg.norm(a, axis=1, keepdims=True)
     b_norm = b / np.linalg.norm(b, axis=1, keepdims=True)
     return np.asarray(np.sum(a_norm * b_norm, axis=1))
+
+
+def ranks_from_similarity_matrix(
+    similarities: np.ndarray,
+    pool_ids: Sequence[str],
+    true_target_ids: Sequence[str],
+) -> list[float]:
+    """Same ranks as retrieval_ranks, from an already-computed matrix (no matmul recomputed)."""
+    pool_index = {pid: i for i, pid in enumerate(pool_ids)}
+    true_columns = np.array([pool_index[tid] for tid in true_target_ids])
+    rank_matrix = rankdata(-similarities, method="average", axis=1)
+    rows = np.arange(similarities.shape[0])
+    return [float(r) for r in rank_matrix[rows, true_columns]]
 
 
 def retrieval_ranks(
@@ -50,11 +75,7 @@ def retrieval_ranks(
 ) -> list[float]:
     """For each anchor, the (tie-averaged) rank of its true target among the pool, 1 = closest."""
     similarities = cosine_similarity_matrix(anchor_vectors, pool_vectors)
-    pool_index = {pid: i for i, pid in enumerate(pool_ids)}
-    true_columns = np.array([pool_index[tid] for tid in true_target_ids])
-    rank_matrix = rankdata(-similarities, method="average", axis=1)
-    rows = np.arange(similarities.shape[0])
-    return [float(r) for r in rank_matrix[rows, true_columns]]
+    return ranks_from_similarity_matrix(similarities, pool_ids, true_target_ids)
 
 
 def outranking_candidates(
