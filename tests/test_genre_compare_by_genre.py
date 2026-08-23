@@ -56,7 +56,7 @@ class TestCompareModelAcrossGenres:
         assert {row["genre"] for row in rows} == set(genres)
         assert all(row["model"] == "model_a" for row in rows)
 
-    def test_reports_naive_perm_and_maxT_p_values(self) -> None:
+    def test_reports_naive_perm_and_maxt_p_values(self) -> None:
         psalm_ids, psalm_vectors, genre_by_psalm, genres, pairs = _fixture()
 
         rows = compare_model_across_genres(

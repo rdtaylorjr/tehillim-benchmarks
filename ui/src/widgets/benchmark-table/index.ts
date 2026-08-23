@@ -1,0 +1,1 @@
+export { initBenchmarkTables } from "./ui";

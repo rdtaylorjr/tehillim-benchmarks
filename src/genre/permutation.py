@@ -12,7 +12,7 @@ class GenrePermutationResult:
     genres: tuple[str, ...]
     auc_observed: tuple[float, ...]
     p_perm: tuple[float, ...]
-    p_maxT: tuple[float, ...]
+    p_maxT: tuple[float, ...]  # noqa: N815 -- Westfall-Young (1993) maxT, matches the CSV/JSON field name
     n_permutations: int
 
 
@@ -98,6 +98,8 @@ def joint_psalm_label_permutation_test(
     """
     rng = rng if rng is not None else np.random.default_rng()
     n = similarity_matrix.shape[0]
+    if n < 2:
+        raise ValueError(f"need at least 2 psalms for a one-vs-rest permutation test, got {n}")
     rows, cols = np.triu_indices(n, k=1)
     sims = similarity_matrix[rows, cols]
     n_genres = len(genres)
@@ -122,7 +124,7 @@ def joint_psalm_label_permutation_test(
     max_null_separation = np.nanmax(null_separation, axis=1)
 
     p_perm = np.full(n_genres, np.nan)
-    p_maxT = np.full(n_genres, np.nan)
+    p_maxT = np.full(n_genres, np.nan)  # noqa: N806 -- Westfall-Young maxT term
     for g in range(n_genres):
         valid = ~np.isnan(null_separation[:, g])
         p_perm[g] = (np.sum(null_separation[valid, g] >= separation_observed[g]) + 1) / (

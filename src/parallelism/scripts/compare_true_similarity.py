@@ -83,13 +83,15 @@ def main() -> None:
         print(f"reusing {len(cached_models)} cached models from {args.output}", file=sys.stderr)
 
     model_paths = sorted(p for p in args.embeddings_dir.glob("**/*.parquet") if p.is_file())
-    node_vectors_by_model = {
-        model: load_embeddings(path)
-        for path in model_paths
-        if (model := dataset_identifier(path)) not in cached_models
-    }
 
-    new_rows = compare_true_similarity(pairs, node_vectors_by_model, background_node_ids)
+    new_rows: list[dict[str, str | int | float]] = []
+    for path in model_paths:
+        model = dataset_identifier(path)
+        if model in cached_models:
+            continue
+        node_vectors = load_embeddings(path)
+        new_rows.extend(compare_true_similarity(pairs, {model: node_vectors}, background_node_ids))
+
     rows = sorted(cached_rows + new_rows, key=lambda r: r["calibrated_effect_size"], reverse=True)
 
     for row in rows:

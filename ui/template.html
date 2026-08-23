@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Hebrew Psalm Representation Benchmarks</title>
+<style>
+  :root {
+    --bg: #f1efe6;
+    --bg-panel: #fbfaf6;
+    --bg-inset: #e9e6da;
+    --ink: #2a2620;
+    --ink-dim: #6b6455;
+    --ink-faint: #948c78;
+    --rule: #dcd7c8;
+    --accent: #3d4f66;
+    --accent-dim: #6b7d94;
+    --accent-wash: #e4e8ee;
+    --good: #3f7a5c;
+    --good-wash: #e3ede7;
+    --warn: #9c7a2e;
+    --warn-wash: #f0e9d8;
+    --bad: #a34038;
+    --bad-wash: #f1e2df;
+    --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  }
+  :root[data-theme="dark"] {
+    --bg: #17150f;
+    --bg-panel: #1f1c15;
+    --bg-inset: #262218;
+    --ink: #ece6d6;
+    --ink-dim: #a89e88;
+    --ink-faint: #756c5a;
+    --rule: #35301f;
+    --accent: #9db3cf;
+    --accent-dim: #7690ad;
+    --accent-wash: #232a35;
+    --good: #7fb894;
+    --good-wash: #1f2b23;
+    --warn: #d1ab5c;
+    --warn-wash: #2e2818;
+    --bad: #d18178;
+    --bad-wash: #2e211e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #17150f;
+      --bg-panel: #1f1c15;
+      --bg-inset: #262218;
+      --ink: #ece6d6;
+      --ink-dim: #a89e88;
+      --ink-faint: #756c5a;
+      --rule: #35301f;
+      --accent: #9db3cf;
+      --accent-dim: #7690ad;
+      --accent-wash: #232a35;
+      --good: #7fb894;
+      --good-wash: #1f2b23;
+      --warn: #d1ab5c;
+      --warn-wash: #2e2818;
+      --bad: #d18178;
+      --bad-wash: #2e211e;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 40px 24px 80px; }
+
+  header.page { margin-bottom: 28px; }
+  header.page .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-dim);
+    margin: 0 0 8px;
+  }
+  header.page h1 {
+    font-family: var(--serif);
+    font-weight: 600;
+    font-size: 32px;
+    margin: 0 0 10px;
+    text-wrap: balance;
+    color: var(--ink);
+  }
+  header.page p.sub {
+    color: var(--ink-dim);
+    margin: 0;
+    font-size: 14.5px;
+  }
+
+  nav.family-tabs {
+    display: flex;
+    gap: 6px;
+    margin: 28px 0 0;
+  }
+  nav.family-tabs button {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--ink-dim);
+    background: var(--bg-inset);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: 5px 14px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  nav.family-tabs button:hover { color: var(--ink); }
+  nav.family-tabs button.active {
+    color: var(--accent);
+    background: var(--accent-wash);
+    border-color: var(--accent-dim);
+  }
+
+  nav.tabs {
+    display: flex;
+    gap: 4px;
+    margin: 12px 0 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  nav.tabs button {
+    font-family: var(--sans);
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink-dim);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: color 0.15s;
+  }
+  nav.tabs button:hover { color: var(--ink); }
+  nav.tabs button.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  section.tab { display: none; padding-top: 20px; }
+  section.tab.active { display: block; }
+
+  h2.section-title {
+    font-family: var(--serif);
+    font-size: 19px;
+    font-weight: 600;
+    margin: 0 0 4px;
+  }
+  p.section-note { color: var(--ink-dim); font-size: 13px; margin: 0 0 18px; }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 14px;
+  }
+  .controls label {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--ink-faint);
+    margin-right: 4px;
+  }
+  .controls select, .controls input[type="text"] {
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--ink);
+    background: var(--bg-panel);
+    border: 1px solid var(--rule);
+    border-radius: 3px;
+    padding: 5px 9px;
+  }
+  .controls select:disabled { opacity: 0.45; cursor: not-allowed; }
+  .controls input[type="text"] { min-width: 180px; }
+
+  .table-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--bg-panel);
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 720px;
+  }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bg-inset);
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-dim);
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--rule);
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+  }
+  thead th:hover { color: var(--accent); }
+  thead th.num { text-align: center; }
+  thead th.sorted-asc::after { content: " \25B4"; color: var(--accent); }
+  thead th.sorted-desc::after { content: " \25BE"; color: var(--accent); }
+  tbody td {
+    padding: 7px 12px;
+    border-bottom: 1px solid var(--rule);
+    font-size: 13px;
+    white-space: nowrap;
+  }
+  tbody td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: center; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: var(--accent-wash); }
+  tbody tr.rank-1 td.model-cell { font-weight: 700; color: var(--accent); }
+
+  .pill {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    padding: 1px 7px;
+    border-radius: 10px;
+    font-weight: 600;
+  }
+  .pill.good { background: var(--good-wash); color: var(--good); }
+  .pill.warn { background: var(--warn-wash); color: var(--warn); }
+  .pill.bad { background: var(--bad-wash); color: var(--bad); }
+
+  .model-cell { color: var(--ink); }
+  .variant-tag {
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--ink-faint);
+  }
+
+  footer.foot {
+    margin-top: 36px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    font-size: 12px;
+    color: var(--ink-faint);
+    font-family: var(--mono);
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="page">
+    <p class="eyebrow">tehillim-representations &middot; benchmark rerun</p>
+    <h1>Hebrew Psalm Representation Benchmarks</h1>
+    <p class="sub">Parallelism, genre, and psalm-shape benchmarks across every model in the tehillim-representations dataset.</p>
+  </header>
+
+  <nav class="family-tabs" id="family-tabs"></nav>
+
+  <nav class="tabs">
+    <button data-tab="parallelism" class="active">Parallelism</button>
+    <button data-tab="genre">Genre</button>
+  </nav>
+
+  <section class="tab active" id="tab-parallelism">
+    <p class="section-note">1,110 half-verse pairs that scholars have identified as parallel, compared against a baseline of unmarked pairs. Type shows results by parallelism classification (Synonymous, Antithetic, Synthetic, Emblematic, Staircase).</p>
+    <div class="controls">
+      <div><label>Type</label><select id="par-scope"><option value="overall">All</option></select></div>
+      <div id="par-unit-wrap"><label id="par-unit-label">Unit</label><select id="par-unit"><option value="all">All</option></select></div>
+      <div id="par-text-wrap"><label>Text</label><select id="par-text"><option value="all">All</option></select></div>
+      <div><label>Filter</label><input type="text" id="par-filter" placeholder="search..."></div>
+    </div>
+    <div class="table-scroll"><table id="par-table"></table></div>
+  </section>
+
+  <section class="tab" id="tab-genre">
+    <p class="section-note">Genre discrimination tests topic (AP/AUC, same- vs. different-genre pairs). The other metrics stack each psalm's cola embeddings into a matrix, build its self-similarity matrix, and test whether that matrix tracks genre, independent of topic. content_distance is the topical control for trajectory.</p>
+    <div class="controls">
+      <div><label>Metric</label><select id="gen-metric"></select></div>
+      <div id="gen-scope-wrap"><label>Genre</label><select id="gen-scope"><option value="overall">All</option></select></div>
+      <div id="gen-unit-wrap"><label id="gen-unit-label">Unit</label><select id="gen-unit"><option value="all">All</option></select></div>
+      <div id="gen-text-wrap"><label>Text</label><select id="gen-text"><option value="all">All</option></select></div>
+      <div><label>Filter</label><input type="text" id="gen-filter" placeholder="search..."></div>
+    </div>
+    <div class="table-scroll"><table id="gen-table"></table></div>
+  </section>
+
+  <footer class="foot">results/{parallelism,genre,trajectory}/master &middot; higher is better unless noted</footer>
+</div>
+
+<script>
+const DATA = /*UI_DATA_JSON*/{"families": {}}/*END_UI_DATA_JSON*/;
+</script>
+<script>
+/*UI_BUNDLE_JS*/
+</script>
+</body>
+</html>

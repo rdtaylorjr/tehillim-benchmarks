@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from tf.app import use as _real_use
-from tf.fabric import Fabric as _real_fabric_class
+from tf.fabric import Fabric as _RealFabric
 
 _PSALMS_BOOK_NAME = "Psalmi"
 # Pinned to match tehillim-representations' local BHSA clone; "latest" is an unpinned float.
@@ -63,7 +63,7 @@ def load_bhsa_api(
     checkout: str = DEFAULT_CHECKOUT,
     mod: str | None = None,
     use_fn: Callable[..., Any] = _real_use,
-    fabric_class: Callable[..., Any] = _real_fabric_class,
+    fabric_class: Callable[..., Any] = _RealFabric,
     timeout_seconds: float = DEFAULT_USE_TIMEOUT_SECONDS,
 ) -> Any:
     """Loads BHSA plus an optional companion module from the local clone; falls back to use()."""

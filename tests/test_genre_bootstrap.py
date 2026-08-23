@@ -83,6 +83,18 @@ def test_block_bootstrap_returns_nan_ci_when_too_few_psalms_for_a_valid_resample
     assert np.isnan(result.gap_ci_high)
 
 
+def test_block_bootstrap_raises_a_clear_error_with_only_one_psalm() -> None:
+    """A 1x1 similarity matrix used to crash via division by zero computing prevalence."""
+    similarity_matrix = np.array([[1.0]])
+    genre_match_matrix = np.array([[True]])
+    background = BackgroundStats(mean=0.3, std=0.3, n_vectors=1)
+
+    with pytest.raises(ValueError, match="no genre pairs"):
+        block_bootstrap_genre_ap_gap_and_auc(
+            [1], similarity_matrix, genre_match_matrix, background, n_resamples=20
+        )
+
+
 def _one_vs_rest_fixture() -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """6 psalms: 0,1,2 in genre A; 3=B, 4=C, 5=D. One-vs-rest population excludes B/C/D pairs."""
     similarity_matrix = np.array(

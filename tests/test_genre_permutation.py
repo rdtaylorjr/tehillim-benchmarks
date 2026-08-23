@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from scipy.stats import mannwhitneyu
 
 from genre.permutation import (
@@ -9,6 +10,15 @@ from genre.permutation import (
     joint_psalm_label_permutation_test,
     one_vs_rest_masks,
 )
+
+
+def test_raises_a_clear_error_instead_of_crashing_when_only_one_psalm_survives_filtering() -> None:
+    """A 1x1 similarity matrix used to crash in _batched_separation via empty triu_indices."""
+    similarity_matrix = np.array([[1.0]])
+    genre_codes = np.array([0])
+
+    with pytest.raises(ValueError, match="at least 2 psalms"):
+        joint_psalm_label_permutation_test(similarity_matrix, genre_codes, ("A",))
 
 
 def test_one_vs_rest_masks_matches_touches_genre_semantics() -> None:
@@ -149,7 +159,7 @@ def test_permutation_p_is_large_for_a_genre_separated_in_the_wrong_direction() -
     assert result.p_perm[0] > 0.5
 
 
-def test_maxT_p_values_never_smaller_than_per_genre_p_perm() -> None:
+def test_maxt_p_values_never_smaller_than_per_genre_p_perm() -> None:
     similarity_matrix, codes, genres = _strong_signal_fixture()
 
     result = joint_psalm_label_permutation_test(

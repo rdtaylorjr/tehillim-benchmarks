@@ -325,3 +325,67 @@ def test_build_family_data_passes_trajectory_by_genre_rows_through_unchanged() -
     )
 
     assert data["trajectory_by_genre"] == by_genre_rows
+
+
+def test_build_family_data_drops_shuffle_control_models_from_every_table() -> None:
+    """A _shuffleNN model is a null-order control checked against its real base, not rankable."""
+    shuffle_row = {
+        "model": "phrase_signature_1_2gram_shuffle03",
+        "model_base": "phrase_signature_1_2gram_shuffle03",
+        "text_variant": "unknown",
+        "separation_auc": 0.9,
+        "average_precision": 0.9,
+        "calibrated_effect_size": 5.0,
+        "mrr_forward": 0.9,
+        "n_true": 1110.0,
+        "same_genre_effect_size": 0.9,
+        "n_same_genre": 500,
+        "scope": "Synonymous",
+    }
+    parallelism_overall = _parallelism_overall_df()
+    parallelism_overall.loc[len(parallelism_overall)] = shuffle_row
+    parallelism_by_type = _parallelism_by_type_df()
+    parallelism_by_type.loc[len(parallelism_by_type)] = shuffle_row
+    genre_overall = _genre_overall_df()
+    genre_overall.loc[len(genre_overall)] = shuffle_row
+    genre_by_genre = _genre_by_genre_df()
+    genre_by_genre.loc[len(genre_by_genre)] = {
+        "model": "phrase_signature_1_2gram_shuffle03",
+        "genre": "Wisdom",
+        "separation_auc": 0.9,
+        "average_precision": 0.9,
+        "separation_p_perm": 0.01,
+        "separation_p_maxT": 0.05,
+        "perm_q": 0.02,
+        "maxT_q": 0.08,
+    }
+    trajectory_rows = _trajectory_rows() + [
+        {"model": "phrase_signature_1_2gram_shuffle03", "metric": "content_distance", "raw_p": 0.9}
+    ]
+    trajectory_by_genre_rows = [
+        {
+            "model": "phrase_signature_1_2gram_shuffle03",
+            "metric": "content_distance",
+            "genre": "Wisdom",
+        }
+    ]
+
+    data = build_family_data(
+        parallelism_overall,
+        parallelism_by_type,
+        genre_overall,
+        genre_by_genre,
+        trajectory_rows,
+        trajectory_by_genre_rows,
+    )
+
+    for table in (
+        "parallelism_overall",
+        "parallelism_by_type",
+        "genre_overall",
+        "genre_by_genre",
+        "trajectory",
+        "trajectory_by_genre",
+    ):
+        models = {row["model"] for row in data[table]}
+        assert "phrase_signature_1_2gram_shuffle03" not in models, table

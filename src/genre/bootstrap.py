@@ -135,6 +135,8 @@ def block_bootstrap_genre_ap_gap_and_auc(
     same_sims, different_sims = _upper_triangle_same_and_different(
         similarity_matrix, genre_match_matrix, population_mask
     )
+    if len(same_sims) + len(different_sims) == 0:
+        raise ValueError(f"no genre pairs available among {n} psalms")
     prevalence = len(same_sims) / (len(same_sims) + len(different_sims))
     point_ap, point_gap, point_auc = _point_ap_gap_and_auc(same_sims, different_sims, background)
 

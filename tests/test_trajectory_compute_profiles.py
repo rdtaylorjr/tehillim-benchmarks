@@ -109,8 +109,8 @@ def test_distance_rows_handles_psalms_of_different_lengths_without_resampling() 
     assert np.isfinite(rows[0]["structural_distance"])
 
 
-def test_profile_shard_path_writes_one_file_per_model_under_a_profiles_subdirectory() -> None:
+def test_profile_shard_path_writes_one_file_per_model_directly_under_output_dir() -> None:
     """One file per model keeps every shard under GitHub's 100MB per-file limit."""
     path = profile_shard_path(Path("results/trajectory"), "bge_m3_vocalized")
 
-    assert path == Path("results/trajectory/profiles/bge_m3_vocalized.parquet")
+    assert path == Path("results/trajectory/bge_m3_vocalized.parquet")

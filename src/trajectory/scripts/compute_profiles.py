@@ -85,7 +85,7 @@ def distance_rows(model: str, profiles: dict[int, dict[str, np.ndarray]]) -> lis
 
 def profile_shard_path(output_dir: Path, model: str) -> Path:
     """One parquet file per model, so no single shard risks GitHub's 100MB per-file limit."""
-    return output_dir / "profiles" / f"{model}.parquet"
+    return output_dir / f"{model}.parquet"
 
 
 def main() -> None:
@@ -95,7 +95,6 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    (args.output_dir / "profiles").mkdir(parents=True, exist_ok=True)
 
     api = load_bhsa_api(args.checkout)
     half_verses_by_psalm = list_psalms_half_verses_by_psalm(api)

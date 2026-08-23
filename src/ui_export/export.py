@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 import pandas as pd
@@ -49,11 +50,22 @@ _GENRE_BY_GENRE_COLUMNS = [
 
 
 _PSALM_LEVEL_MODEL = r"_psalm(?:_shuffle\d+)?$"
+_SHUFFLE_CONTROL_MODEL = r"_shuffle\d+"
 
 
 def _drop_psalm_level_models(df: pd.DataFrame) -> pd.DataFrame:
     """Excludes _psalm[_shuffleNN]-suffixed models: degenerate for a colon-pair task."""
     return df[~df["model"].str.contains(_PSALM_LEVEL_MODEL, regex=True)]
+
+
+def _drop_shuffle_control_models(df: pd.DataFrame) -> pd.DataFrame:
+    """Excludes _shuffleNN models: a null-order control checked against one model, not rankable."""
+    return df[~df["model"].str.contains(_SHUFFLE_CONTROL_MODEL, regex=True)]
+
+
+def _drop_shuffle_control_rows(rows: list[dict]) -> list[dict]:
+    """Same exclusion as _drop_shuffle_control_models, for a plain row-dict list."""
+    return [row for row in rows if not re.search(_SHUFFLE_CONTROL_MODEL, row.get("model", ""))]
 
 
 def _add_model_base_and_text_variant(df: pd.DataFrame) -> pd.DataFrame:
@@ -74,9 +86,18 @@ def build_family_data(
     trajectory_by_genre_rows: list[dict] | None = None,
 ) -> dict:
     """One family's UI payload: the 6 tables the UI's tabs render."""
-    parallelism_overall_df = _drop_psalm_level_models(parallelism_overall_df)
-    parallelism_by_type_df = _drop_psalm_level_models(parallelism_by_type_df)
-    genre_by_genre_df = _add_model_base_and_text_variant(genre_by_genre_df)
+    parallelism_overall_df = _drop_shuffle_control_models(
+        _drop_psalm_level_models(parallelism_overall_df)
+    )
+    parallelism_by_type_df = _drop_shuffle_control_models(
+        _drop_psalm_level_models(parallelism_by_type_df)
+    )
+    genre_overall_df = _drop_shuffle_control_models(genre_overall_df)
+    genre_by_genre_df = _drop_shuffle_control_models(
+        _add_model_base_and_text_variant(genre_by_genre_df)
+    )
+    trajectory_rows = _drop_shuffle_control_rows(trajectory_rows)
+    trajectory_by_genre_rows = _drop_shuffle_control_rows(trajectory_by_genre_rows or [])
     return {
         "parallelism_overall": parallelism_overall_df[_PARALLELISM_OVERALL_COLUMNS].to_dict(
             "records"
@@ -87,7 +108,7 @@ def build_family_data(
         "genre_overall": genre_overall_df[_GENRE_OVERALL_COLUMNS].to_dict("records"),
         "genre_by_genre": genre_by_genre_df[_GENRE_BY_GENRE_COLUMNS].to_dict("records"),
         "trajectory": trajectory_rows,
-        "trajectory_by_genre": trajectory_by_genre_rows or [],
+        "trajectory_by_genre": trajectory_by_genre_rows,
     }
 
 

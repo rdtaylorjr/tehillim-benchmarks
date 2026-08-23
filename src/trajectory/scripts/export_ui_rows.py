@@ -26,18 +26,13 @@ _FIELDS = (
 
 def trajectory_ui_rows(validation_df: pd.DataFrame) -> list[dict]:
     """One UI row per validation.csv row, with model split into model_base/text_variant."""
-    rows = []
-    for _, row in validation_df.iterrows():
-        model_base, text_variant = split_model_name(row["model"])
-        rows.append(
-            {
-                "model": row["model"],
-                "model_base": model_base,
-                "text_variant": text_variant,
-                "metric": row["metric"],
-                **{field: row[field] for field in _FIELDS},
-            }
-        )
+    split = validation_df["model"].map(split_model_name)
+    df = validation_df.assign(
+        model_base=[base for base, _ in split], text_variant=[variant for _, variant in split]
+    )
+    rows: list[dict] = df[["model", "model_base", "text_variant", "metric", *_FIELDS]].to_dict(
+        "records"
+    )
     return rows
 
 
@@ -56,18 +51,13 @@ _BY_GENRE_FIELDS = (
 
 def trajectory_by_genre_ui_rows(breakdown_df: pd.DataFrame) -> list[dict]:
     """One UI row per validate_against_genre_by_genre.csv row, model split as above."""
-    rows = []
-    for _, row in breakdown_df.iterrows():
-        model_base, text_variant = split_model_name(row["model"])
-        rows.append(
-            {
-                "model": row["model"],
-                "model_base": model_base,
-                "text_variant": text_variant,
-                "metric": row["metric"],
-                **{field: row[field] for field in _BY_GENRE_FIELDS},
-            }
-        )
+    split = breakdown_df["model"].map(split_model_name)
+    df = breakdown_df.assign(
+        model_base=[base for base, _ in split], text_variant=[variant for _, variant in split]
+    )
+    rows: list[dict] = df[
+        ["model", "model_base", "text_variant", "metric", *_BY_GENRE_FIELDS]
+    ].to_dict("records")
     return rows
 
 

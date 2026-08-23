@@ -151,7 +151,7 @@ def test_permutation_p_is_large_when_labels_are_unrelated_to_distance() -> None:
     assert float(np.median(result.p_perm)) > 0.05
 
 
-def test_p_values_never_zero_and_maxT_at_least_p_perm() -> None:
+def test_p_values_never_zero_and_maxt_at_least_p_perm() -> None:
     idx_a, idx_b, distances, codes, genres = _clustered_distance_fixture()
 
     result = joint_genre_breakdown_permutation_test(

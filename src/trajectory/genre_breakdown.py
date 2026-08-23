@@ -14,7 +14,7 @@ class GenreBreakdownResult:
     genres: tuple[str, ...]
     gap_observed: tuple[float, ...]
     p_perm: tuple[float, ...]
-    p_maxT: tuple[float, ...]
+    p_maxT: tuple[float, ...]  # noqa: N815 -- Westfall-Young maxT term
     n_permutations: int
 
 
@@ -159,7 +159,7 @@ def joint_genre_breakdown_permutation_test(
     max_null_gap = np.nanmax(null_gap, axis=1)
 
     p_perm = np.full(n_genres, np.nan)
-    p_maxT = np.full(n_genres, np.nan)
+    p_maxT = np.full(n_genres, np.nan)  # noqa: N806 -- Westfall-Young maxT term
     for g in range(n_genres):
         valid = ~np.isnan(null_gap[:, g])
         p_perm[g] = (np.sum(null_gap[valid, g] >= gap_observed[g]) + 1) / (int(np.sum(valid)) + 1)
