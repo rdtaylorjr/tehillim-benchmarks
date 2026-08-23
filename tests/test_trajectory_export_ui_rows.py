@@ -47,6 +47,8 @@ def _validation_df() -> pd.DataFrame:
             {
                 "model": "bge_m3_vocalized",
                 "metric": "content_distance",
+                "n_pairs_total": 200,
+                "n_pairs_valid": 198,
                 "raw_gap": 0.013,
                 "raw_p": 0.0001,
                 "raw_effect_size": 5.2,
@@ -63,6 +65,8 @@ def _validation_df() -> pd.DataFrame:
             {
                 "model": "miqrabert_consonantal",
                 "metric": "structural_distance",
+                "n_pairs_total": 150,
+                "n_pairs_valid": 140,
                 "raw_gap": 0.02,
                 "raw_p": 0.05,
                 "raw_effect_size": 1.5,
@@ -100,6 +104,8 @@ def test_trajectory_ui_rows_carries_metric_and_every_source_field() -> None:
 
     row = rows[1]
     assert row["metric"] == "structural_distance"
+    assert row["n_pairs_total"] == 150
+    assert row["n_pairs_valid"] == 140
     assert row["raw_gap"] == 0.02
     assert row["raw_p"] == 0.05
     assert row["raw_effect_size"] == 1.5
