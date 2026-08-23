@@ -10,13 +10,13 @@ _FEATURES = (
     "parallel_group_id parallel_member_id parallel_type parallel_group parallel_member "
     "parallel_signature parallel_ambiguous"
 )
-# rdtaylorjr/tehillim-parallelism has its own release history and cannot share DEFAULT_CHECKOUT.
-_TEHILLIM_PARALLELISM_CHECKOUT = "v1.0"
+# rdtaylorjr/tehillim-logos has its own release history and cannot share DEFAULT_CHECKOUT.
+_TEHILLIM_LOGOS_CHECKOUT = "v1.0"
 
 
 def load_api(checkout: str = DEFAULT_CHECKOUT) -> Any:
-    """Loads BHSA plus tehillim-parallelism's parallel_* features via Text-Fabric use()."""
-    mod = f"rdtaylorjr/tehillim-parallelism/tf:{_TEHILLIM_PARALLELISM_CHECKOUT}"
+    """Loads BHSA plus tehillim-logos's parallel_* features via Text-Fabric use()."""
+    mod = f"rdtaylorjr/tehillim-logos/tf:{_TEHILLIM_LOGOS_CHECKOUT}"
     api = load_bhsa_api(checkout=checkout, mod=mod)
     api.TF.load(_FEATURES, add=True, silent="deep")
     missing = [f for f in _FEATURES.split() if not hasattr(api.F, f)]

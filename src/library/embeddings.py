@@ -10,10 +10,10 @@ TEXT_VARIANTS = ("consonantal", "vocalized", "cantillation")
 
 
 def dataset_identifier(path: Path) -> str:
-    """Joins every Hive partition value between the file and its `type=` root, deepest first."""
+    """Joins every Hive partition value between the file and its `domain=` root, deepest first."""
     parts = []
     node = path.parent
-    while "=" in node.name and not node.name.startswith("type="):
+    while "=" in node.name and not node.name.startswith("domain="):
         parts.append(node.name.split("=", 1)[1])
         node = node.parent
     return "_".join(reversed(parts))

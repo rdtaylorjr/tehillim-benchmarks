@@ -1,7 +1,7 @@
 [project]
 name = "tehillim-benchmarks"
 version = "0.2.0"
-description = "Evaluates embedding models against Psalms parallelism (tehillim-parallelism, a Text-Fabric module via use()) and genre benchmarks."
+description = "Evaluates embedding models against Psalms parallelism (tehillim-logos, a Text-Fabric module via use()) and genre benchmarks."
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [

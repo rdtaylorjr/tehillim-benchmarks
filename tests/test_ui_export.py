@@ -1,6 +1,6 @@
 import pandas as pd
 
-from ui_export.export import build_family_data
+from ui_export.export import build_domain_data
 
 
 def _parallelism_overall_df() -> pd.DataFrame:
@@ -94,8 +94,8 @@ def _trajectory_rows() -> list[dict]:
     return [{"model": "bge_m3_vocalized", "metric": "content_distance", "raw_p": 0.001}]
 
 
-def test_build_family_data_selects_only_the_uis_parallelism_overall_columns() -> None:
-    data = build_family_data(
+def test_build_domain_data_selects_only_the_uis_parallelism_overall_columns() -> None:
+    data = build_domain_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
         _genre_overall_df(),
@@ -117,8 +117,8 @@ def test_build_family_data_selects_only_the_uis_parallelism_overall_columns() ->
     assert "unused_column" not in row
 
 
-def test_build_family_data_keeps_scope_in_parallelism_by_type() -> None:
-    data = build_family_data(
+def test_build_domain_data_keeps_scope_in_parallelism_by_type() -> None:
+    data = build_domain_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
         _genre_overall_df(),
@@ -130,9 +130,9 @@ def test_build_family_data_keeps_scope_in_parallelism_by_type() -> None:
     assert row["scope"] == "Synonymous"
 
 
-def test_build_family_data_drops_psalm_level_models_from_parallelism_overall() -> None:
+def test_build_domain_data_drops_psalm_level_models_from_parallelism_overall() -> None:
     """Psalm-broadcast representations are architecturally degenerate for a colon-pair task."""
-    data = build_family_data(
+    data = build_domain_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
         _genre_overall_df(),
@@ -144,7 +144,7 @@ def test_build_family_data_drops_psalm_level_models_from_parallelism_overall() -
     assert models == {"bge_m3_vocalized"}
 
 
-def test_build_family_data_drops_psalm_level_shuffle_control_models_from_parallelism_overall() -> (
+def test_build_domain_data_drops_psalm_level_shuffle_control_models_from_parallelism_overall() -> (
     None
 ):
     """A _psalm_shuffleNN model is just as degenerate as its unshuffled _psalm base."""
@@ -160,7 +160,7 @@ def test_build_family_data_drops_psalm_level_shuffle_control_models_from_paralle
         "n_true": 1110.0,
         "unused_column": "should be dropped",
     }
-    data = build_family_data(
+    data = build_domain_data(
         parallelism_overall,
         _parallelism_by_type_df(),
         _genre_overall_df(),
@@ -172,8 +172,8 @@ def test_build_family_data_drops_psalm_level_shuffle_control_models_from_paralle
     assert "morph_signature_1_2gram_psalm_shuffle03" not in models
 
 
-def test_build_family_data_drops_psalm_level_models_from_parallelism_by_type() -> None:
-    data = build_family_data(
+def test_build_domain_data_drops_psalm_level_models_from_parallelism_by_type() -> None:
+    data = build_domain_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
         _genre_overall_df(),
@@ -185,7 +185,7 @@ def test_build_family_data_drops_psalm_level_models_from_parallelism_by_type() -
     assert models == {"bge_m3_vocalized"}
 
 
-def test_build_family_data_keeps_psalm_level_models_in_genre_tables() -> None:
+def test_build_domain_data_keeps_psalm_level_models_in_genre_tables() -> None:
     """Psalm-broadcast representations are exactly the right granularity for a psalm-level task."""
     genre_overall = _genre_overall_df()
     genre_overall.loc[len(genre_overall)] = {
@@ -197,7 +197,7 @@ def test_build_family_data_keeps_psalm_level_models_in_genre_tables() -> None:
         "same_genre_effect_size": 0.5,
         "n_same_genre": 500,
     }
-    data = build_family_data(
+    data = build_domain_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
         genre_overall,
@@ -209,8 +209,8 @@ def test_build_family_data_keeps_psalm_level_models_in_genre_tables() -> None:
     assert "form_icf_posmean_psalm" in models
 
 
-def test_build_family_data_selects_genre_overall_columns() -> None:
-    data = build_family_data(
+def test_build_domain_data_selects_genre_overall_columns() -> None:
+    data = build_domain_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
         _genre_overall_df(),
@@ -230,8 +230,8 @@ def test_build_family_data_selects_genre_overall_columns() -> None:
     }
 
 
-def test_build_family_data_selects_genre_by_genre_columns() -> None:
-    data = build_family_data(
+def test_build_domain_data_selects_genre_by_genre_columns() -> None:
+    data = build_domain_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
         _genre_overall_df(),
@@ -252,12 +252,12 @@ def test_build_family_data_selects_genre_by_genre_columns() -> None:
     }
 
 
-def test_build_family_data_derives_model_base_and_text_variant_for_genre_by_genre() -> None:
+def test_build_domain_data_derives_model_base_and_text_variant_for_genre_by_genre() -> None:
     """genre_by_genre.csv has no model_base/text_variant columns, so the Text filter needs them
     derived from `model`, or selecting a text tier silently drops every by-genre row (the bug)."""
     genre_by_genre = _genre_by_genre_df()
     genre_by_genre.loc[0, "model"] = "word_consonantal_binary"
-    data = build_family_data(
+    data = build_domain_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
         _genre_overall_df(),
@@ -270,8 +270,8 @@ def test_build_family_data_derives_model_base_and_text_variant_for_genre_by_genr
     assert row["text_variant"] == "consonantal"
 
 
-def test_build_family_data_passes_trajectory_rows_through_unchanged() -> None:
-    data = build_family_data(
+def test_build_domain_data_passes_trajectory_rows_through_unchanged() -> None:
+    data = build_domain_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
         _genre_overall_df(),
@@ -282,8 +282,8 @@ def test_build_family_data_passes_trajectory_rows_through_unchanged() -> None:
     assert data["trajectory"] == _trajectory_rows()
 
 
-def test_build_family_data_has_exactly_the_six_ui_keys() -> None:
-    data = build_family_data(
+def test_build_domain_data_has_exactly_the_six_ui_keys() -> None:
+    data = build_domain_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
         _genre_overall_df(),
@@ -301,8 +301,8 @@ def test_build_family_data_has_exactly_the_six_ui_keys() -> None:
     }
 
 
-def test_build_family_data_defaults_trajectory_by_genre_to_an_empty_list() -> None:
-    data = build_family_data(
+def test_build_domain_data_defaults_trajectory_by_genre_to_an_empty_list() -> None:
+    data = build_domain_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
         _genre_overall_df(),
@@ -313,9 +313,9 @@ def test_build_family_data_defaults_trajectory_by_genre_to_an_empty_list() -> No
     assert data["trajectory_by_genre"] == []
 
 
-def test_build_family_data_passes_trajectory_by_genre_rows_through_unchanged() -> None:
+def test_build_domain_data_passes_trajectory_by_genre_rows_through_unchanged() -> None:
     by_genre_rows = [{"model": "bge_m3_vocalized", "metric": "content_distance", "genre": "Wisdom"}]
-    data = build_family_data(
+    data = build_domain_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
         _genre_overall_df(),
@@ -327,7 +327,7 @@ def test_build_family_data_passes_trajectory_by_genre_rows_through_unchanged() -
     assert data["trajectory_by_genre"] == by_genre_rows
 
 
-def test_build_family_data_drops_shuffle_control_models_from_every_table() -> None:
+def test_build_domain_data_drops_shuffle_control_models_from_every_table() -> None:
     """A _shuffleNN model is a null-order control checked against its real base, not rankable."""
     shuffle_row = {
         "model": "phrase_signature_1_2gram_shuffle03",
@@ -370,7 +370,7 @@ def test_build_family_data_drops_shuffle_control_models_from_every_table() -> No
         }
     ]
 
-    data = build_family_data(
+    data = build_domain_data(
         parallelism_overall,
         parallelism_by_type,
         genre_overall,

@@ -161,19 +161,19 @@ def test_load_sparse_embeddings_matches_a_reconstructed_dense_matrix(tmp_path: P
 
 
 def test_dataset_identifier_reads_model_and_variation_from_the_hive_path() -> None:
-    path = Path("data/type=semantic/model=bge_m3/text=vocalized/part-0.parquet")
+    path = Path("data/domain=semantic/model=bge_m3/text=vocalized/part-0.parquet")
 
     assert dataset_identifier(path) == "bge_m3_vocalized"
 
 
 def test_dataset_identifier_handles_a_two_level_lexical_path() -> None:
-    path = Path("data/type=lexical/unit=homograph/construction=binary/part-0.parquet")
+    path = Path("data/domain=lexical/unit=homograph/construction=binary/part-0.parquet")
 
     assert dataset_identifier(path) == "homograph_binary"
 
 
 def test_dataset_identifier_handles_a_three_level_path_with_an_extra_text_tier() -> None:
-    path = Path("data/type=lexical/unit=word/text=consonantal/construction=binary/part-0.parquet")
+    path = Path("data/domain=lexical/unit=word/text=consonantal/construction=binary/part-0.parquet")
 
     assert dataset_identifier(path) == "word_consonantal_binary"
 

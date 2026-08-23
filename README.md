@@ -1,25 +1,25 @@
 # tehillim-benchmarks
 
 Evaluates embedding models against scholarly annotations of Psalms parallelism and genre, scoring vectors from
-[tehillim-representations](https://github.com/rdtaylorjr/tehillim-representations) on a retrieval benchmark
-built from [tehillim-parallelism](https://github.com/rdtaylorjr/tehillim-parallelism)'s aligned
+[tehillim-embeddings](https://github.com/rdtaylorjr/tehillim-embeddings) on a retrieval benchmark
+built from [tehillim-logos](https://github.com/rdtaylorjr/tehillim-logos)'s aligned
 `parallel_*` Text-Fabric features. Consumes both as pure data dependencies, never as code
 dependencies.
 
 ## Data sources
 
 * **Parallelism structure**: `parallel_*` node features on BHSA `half_verse` nodes, loaded via
-  Text-Fabric's `use("etcbc/bhsa", mod="rdtaylorjr/tehillim-parallelism/tf")`. No local checkout
+  Text-Fabric's `use("etcbc/bhsa", mod="rdtaylorjr/tehillim-logos/tf")`. No local checkout
   needed, Text-Fabric fetches and caches the module itself.
-* **Embedding vectors**: Parquet files from a local `tehillim-representations` checkout, Hive-partitioned
-  at `data/type=semantic/model=<slug>/text=<variant>/part-0.parquet`. `--checkout` on Text-Fabric
+* **Embedding vectors**: Parquet files from a local `tehillim-embeddings` checkout, Hive-partitioned
+  at `data/domain=semantic/model=<slug>/text=<variant>/part-0.parquet`. `--checkout` on Text-Fabric
   loaders and `embeddings_dir` on the scripts below are independent inputs.
 
 Every benchmark script's `--output`/`--output-dir` writes into a local
 [tehillim-data](https://github.com/rdtaylorjr/tehillim-data) checkout, kept as a separate repo
 since result Parquet files run tens of megabytes each and bloat a code repo's clone size and
-history. That checkout is Hive-partitioned the same way as `tehillim-representations`:
-`benchmark={parallelism,genre,trajectory}/family={lexical,semantic}/stage={raw,detail,master,shuffle_control}/...`.
+history. That checkout is Hive-partitioned the same way as `tehillim-embeddings`:
+`benchmark={parallelism,genre,trajectory}/domain={lexical,semantic}/stage={raw,detail,master,shuffle_control}/...`.
 `stage=raw` holds each comparison script's own CSV output, `stage=detail` the per-observation
 Parquet export, `stage=master` the joined final report, `stage=shuffle_control` the order-shuffle
 null control. Trajectory has no `detail`/`master`/`shuffle_control` stage: `compute_profiles.py`
@@ -112,7 +112,7 @@ the resampled psalms, rather than resampling the derived pairs directly.
 
 ```bash
 .venv/bin/python -m genre.scripts.compare_calibrated \
-  /path/to/psalms-browser.csv /path/to/tehillim-representations/data/type=semantic --output results.csv
+  /path/to/psalms-browser.csv /path/to/tehillim-embeddings/data/domain=semantic --output results.csv
 ```
 
 ### Per-genre one-vs-rest breakdown and its inference layer
@@ -152,12 +152,12 @@ genre descriptively while still failing to clear the permutation bar, or vice ve
 
 ```bash
 .venv/bin/python -m genre.scripts.compare_by_genre \
-  /path/to/psalms-browser.csv /path/to/tehillim-representations/data --output results.csv
+  /path/to/psalms-browser.csv /path/to/tehillim-embeddings/data --output results.csv
 ```
 
 ## Lexical benchmark
 
-`tehillim-representations` also ships lexical representations (`data/type=lexical/`), built from
+`tehillim-embeddings` also ships lexical representations (`data/domain=lexical/`), built from
 BHSA's lexical and surface-form features rather than a learned embedding model, across three
 units: `homograph` (bare consonantal spelling, BHSA's `lex0`), `lexeme` (disambiguated
 dictionary entry, BHSA's `lex`), and `word` (the inflected surface form, in `consonantal`,
@@ -166,7 +166,7 @@ benchmarks above, through the same evaluation code, no separate pipeline. Two ar
 variants exist for the positional/recurrence weightings: colon-level (each half-verse's vector
 distinct, correct for parallelism's pairwise colon comparison) and psalm-broadcast (one
 whole-psalm vector repeated across its colons, correct for genre's mean-pooled psalm centroid),
-documented in `tehillim-representations`'s README. Parallelism-scoped UI tables exclude
+documented in `tehillim-embeddings`'s README. Parallelism-scoped UI tables exclude
 `_psalm`-suffixed models (`ui_export.export._drop_psalm_level_models`), since a broadcast vector is
 architecturally degenerate for a colon-pairwise task. Genre tables keep them.
 
@@ -176,7 +176,7 @@ Some lexical representations encode colon order directly (position-binned pyrami
 recurrence). `library.order_shuffle.order_shuffle_result` tests whether a representation's
 benchmark score reflects genuine order signal or a mechanical artifact of the binning: score the
 real embeddings, score N within-psalm-order-shuffled embeddings
-(`lexical.scripts.generate_shuffle_control[_colon]` in `tehillim-representations`), and report
+(`lexical.scripts.generate_shuffle_control[_colon]` in `tehillim-embeddings`), and report
 `delta_order` (real score minus mean shuffled score) with a rank-based permutation p-value,
 `(count(shuffled >= real) + 1) / (n + 1)`, the same convention used everywhere else in this project.
 This replaced an earlier ad hoc z-score computed from a 30-draw empirical mean/std, which implied a
@@ -198,24 +198,24 @@ the positional binning itself, an open question left unresolved by this control.
 
 ### BHSA checkout pin
 
-`library.bhsa.DEFAULT_CHECKOUT` is pinned to `v1.8.1`, matching `tehillim-representations`'s local
+`library.bhsa.DEFAULT_CHECKOUT` is pinned to `v1.8.1`, matching `tehillim-embeddings`'s local
 BHSA clone, rather than floating on `"latest"`. `parallelism.tf_features.load_api` uses a separate
-`_TEHILLIM_PARALLELISM_CHECKOUT = "v1.0"` for the `rdtaylorjr/tehillim-parallelism`
+`_TEHILLIM_LOGOS_CHECKOUT = "v1.0"` for the `rdtaylorjr/tehillim-logos`
 module, since that module has an independent release history and cannot share BHSA's pin.
 
 `library.bhsa.load_bhsa_api` tries the local BHSA clone at `~/Developer/hebrew/bhsa/tf/2021` first,
-the same clone `tehillim-representations` reads from. Only if that fails does it fall back to
+the same clone `tehillim-embeddings` reads from. Only if that fails does it fall back to
 Text-Fabric's `use()`, with a 30-second timeout (`DEFAULT_USE_TIMEOUT_SECONDS`), since `use()`
 re-verifies its release against GitHub's API even when the data is fully cached locally, and can
 stall or back off for minutes under a GitHub rate limit.
 
-## Morphological benchmark
+## Morphology benchmark
 
-`tehillim-representations` also ships morphological representations (`data/type=morphological/`),
+`tehillim-embeddings` also ships morphology representations (`data/domain=morphology/`),
 built from BHSA's word-level grammatical features (part of speech, agreement, verbal stem/tense,
 pronominal-suffix morphology) rather than lexical identity or a learned embedding model. They
 score against the same parallelism and genre benchmarks above, through the same evaluation code, no
-separate pipeline, with the same colon-level/psalm-broadcast split as the lexical family
+separate pipeline, with the same colon-level/psalm-broadcast split as the lexical domain
 (`_psalm`-suffixed models excluded from parallelism-scoped UI tables, kept for genre). One
 representation, `morph_suffix_posmean` (psalm-scale deployment), has no colon-level form at all and
 isn't marked by the `_psalm` naming convention, so it's excluded from parallelism scoring entirely
@@ -223,7 +223,7 @@ rather than relying on `_drop_psalm_level_models` to catch it.
 
 ### Sparse embedding scoring
 
-One morphological representation, `morph_signature`'s trigram construction, has 75,894 dimensions
+One morphology representation, `morph_signature`'s trigram construction, has 75,894 dimensions
 with at most a few dozen nonzero entries per colon, and is stored sparse
 (`node_id`/`indices`/`values` Parquet schema, `sparse=true` in the file's schema metadata) rather
 than as a dense `vector` column, to avoid materializing a mostly-zero array per colon.
@@ -243,7 +243,7 @@ requires calling the sparse functions directly.
 `src/trajectory` asks a different kind of question than the two benchmarks above: how a psalm's
 meaning moves through the poem, independent of any benchmark ranking, rather than whether an
 embedding model discriminates a labeled phenomenon. It is computed for every model in a
-`tehillim-representations` checkout, never filtered to a top-k subset, so this analysis never depends on
+`tehillim-embeddings` checkout, never filtered to a top-k subset, so this analysis never depends on
 how a model scored elsewhere.
 
 Every psalm gets two independent representations. The **content centroid**
@@ -292,9 +292,9 @@ the naive per-pair form does not scale past a few thousand permutations at 150 p
 | `export_ui_rows.py` | selects the UI's trajectory columns from `validate_against_genre.py`'s CSVs |
 
 ```bash
-DATA=/path/to/tehillim-data/benchmark=trajectory/family=semantic
+DATA=/path/to/tehillim-data/benchmark=trajectory/domain=semantic
 .venv/bin/python -m trajectory.scripts.compute_profiles \
-  /path/to/tehillim-representations/data/type=semantic \
+  /path/to/tehillim-embeddings/data/domain=semantic \
   --output-dir "$DATA/stage=profiles"
 .venv/bin/python -m trajectory.scripts.validate_against_genre \
   /path/to/psalms-browser.csv \
@@ -313,9 +313,9 @@ DATA=/path/to/tehillim-data/benchmark=trajectory/family=semantic
 The actual results page lives in a separate repo,
 [tehillim-ui](https://github.com/rdtaylorjr/tehillim-ui) — a small TypeScript project with no
 dependency on this repo's Python code, only on the JSON files this repo produces. `ui_export.export`
-selects one family's UI columns into `ui_<family>.json`; `ui_export.scripts.build_ui_page` then
-injects a tehillim-ui build (its bundle plus `template.html`) and every family's JSON into one
-final, self-contained `ui.html`, filling in an empty six-table placeholder for any family (e.g.
+selects one domain's UI columns into `ui_<domain>.json`; `ui_export.scripts.build_ui_page` then
+injects a tehillim-ui build (its bundle plus `template.html`) and every domain's JSON into one
+final, self-contained `ui.html`, filling in an empty six-table placeholder for any domain (e.g.
 `phonology`, `discourse`) that has no data yet.
 
 ```bash
@@ -341,10 +341,10 @@ Score one embedding file:
 
 ```bash
 .venv/bin/python -m parallelism.evaluate \
-  /path/to/tehillim-representations/data/type=semantic/model=bge_m3/text=vocalized/part-0.parquet
+  /path/to/tehillim-embeddings/data/domain=semantic/model=bge_m3/text=vocalized/part-0.parquet
 ```
 
-Score every model in a `tehillim-representations` checkout's data directory:
+Score every model in a `tehillim-embeddings` checkout's data directory:
 
 | script | computes |
 |---|---|
@@ -357,7 +357,7 @@ Score every model in a `tehillim-representations` checkout's data directory:
 
 ```bash
 .venv/bin/python -m parallelism.scripts.compare_models \
-  /path/to/tehillim-representations/data/type=semantic --output results.csv
+  /path/to/tehillim-embeddings/data/domain=semantic --output results.csv
 ```
 
 `model` in every output splits into `model_base` and `text_variant` (consonantal/vocalized/
@@ -385,13 +385,13 @@ have any variance, since one already-cached run is not worth losing to a single 
 
 ## Family
 
-* [tehillim-representations](https://github.com/rdtaylorjr/tehillim-embeddings): the embedding vectors
+* [tehillim-embeddings](https://github.com/rdtaylorjr/tehillim-embeddings): the embedding vectors
   scored here
 * [tehillim-ui](https://github.com/rdtaylorjr/tehillim-ui): the results page that renders this
-  repo's `ui_<family>.json` output
+  repo's `ui_<domain>.json` output
 * [tehillim-data](https://github.com/rdtaylorjr/tehillim-data): hosts this repo's Parquet/CSV/JSON
   output
-* [tehillim-parallelism](https://github.com/rdtaylorjr/tehillim-parallelism): the alignment code and
+* [tehillim-logos](https://github.com/rdtaylorjr/tehillim-logos): the alignment code and
   `parallel_*` Text-Fabric features this benchmark is built from
 * [bhsa](https://github.com/etcbc/bhsa): the core text and linguistic annotation for the Hebrew
   Bible

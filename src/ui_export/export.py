@@ -1,4 +1,4 @@
-"""Selects the results UI's required columns from one representation family's results."""
+"""Selects the results UI's required columns from one representation domain's results."""
 
 import argparse
 import json
@@ -77,7 +77,7 @@ def _add_model_base_and_text_variant(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def build_family_data(
+def build_domain_data(
     parallelism_overall_df: pd.DataFrame,
     parallelism_by_type_df: pd.DataFrame,
     genre_overall_df: pd.DataFrame,
@@ -85,7 +85,7 @@ def build_family_data(
     trajectory_rows: list[dict],
     trajectory_by_genre_rows: list[dict] | None = None,
 ) -> dict:
-    """One family's UI payload: the 6 tables the UI's tabs render."""
+    """One domain's UI payload: the 6 tables the UI's tabs render."""
     parallelism_overall_df = _drop_shuffle_control_models(
         _drop_psalm_level_models(parallelism_overall_df)
     )
@@ -114,7 +114,7 @@ def build_family_data(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("family", help="representation family name, e.g. semantic, lexical")
+    parser.add_argument("domain", help="representation domain name, e.g. semantic, lexical")
     parser.add_argument("--parallelism-dir", type=Path, required=True)
     parser.add_argument("--genre-dir", type=Path, required=True)
     parser.add_argument("--trajectory-ui-rows", type=Path, required=True)
@@ -139,7 +139,7 @@ def main() -> None:
         else None
     )
 
-    data = build_family_data(
+    data = build_domain_data(
         parallelism_overall_df,
         parallelism_by_type_df,
         genre_overall_df,
@@ -147,8 +147,8 @@ def main() -> None:
         trajectory_rows,
         trajectory_by_genre_rows,
     )
-    args.output.write_text(json.dumps({args.family: data}))
-    print(f"wrote family={args.family} to {args.output}")
+    args.output.write_text(json.dumps({args.domain: data}))
+    print(f"wrote domain={args.domain} to {args.output}")
 
 
 if __name__ == "__main__":

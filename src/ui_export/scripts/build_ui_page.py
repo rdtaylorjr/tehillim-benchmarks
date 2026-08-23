@@ -1,16 +1,16 @@
-"""Assembles the results UI's HTML page from the built bundle, family JSON, and a template."""
+"""Assembles the results UI's HTML page from the built bundle, domain JSON, and a template."""
 
 import argparse
 import json
 import re
 from pathlib import Path
 
-FamilyData = dict[str, list[dict[str, object]]]
-Families = dict[str, FamilyData]
+DomainData = dict[str, list[dict[str, object]]]
+Domains = dict[str, DomainData]
 
-ALL_FAMILY_IDS = ("semantic", "lexical", "phonology", "morphology", "syntax", "discourse")
+ALL_DOMAIN_IDS = ("semantic", "lexical", "phonology", "morphology", "syntax", "discourse")
 
-_EMPTY_FAMILY_DATA: FamilyData = {
+_EMPTY_DOMAIN_DATA: DomainData = {
     "parallelism_overall": [],
     "parallelism_by_type": [],
     "genre_overall": [],
@@ -23,33 +23,33 @@ _DATA_PATTERN = re.compile(r"/\*UI_DATA_JSON\*/.*?/\*END_UI_DATA_JSON\*/", re.DO
 _BUNDLE_MARKER = "/*UI_BUNDLE_JS*/"
 
 
-def merge_family_json_files(paths: list[Path]) -> Families:
-    """Merges each ui_<family>.json's single top-level family key into one dict."""
-    merged: Families = {}
+def merge_domain_json_files(paths: list[Path]) -> Domains:
+    """Merges each ui_<domain>.json's single top-level domain key into one dict."""
+    merged: Domains = {}
     for path in paths:
         merged.update(json.loads(path.read_text()))
     return merged
 
 
-def build_ui_page_html(template: str, bundle_js: str, families: Families) -> str:
-    """Fills any missing family with empty tables, then injects DATA and the bundle JS."""
+def build_ui_page_html(template: str, bundle_js: str, domains: Domains) -> str:
+    """Fills any missing domain with empty tables, then injects DATA and the bundle JS."""
     complete = {
-        family_id: families.get(family_id, _EMPTY_FAMILY_DATA) for family_id in ALL_FAMILY_IDS
+        domain_id: domains.get(domain_id, _EMPTY_DOMAIN_DATA) for domain_id in ALL_DOMAIN_IDS
     }
-    html = _DATA_PATTERN.sub(json.dumps({"families": complete}), template)
+    html = _DATA_PATTERN.sub(json.dumps({"domains": complete}), template)
     return html.replace(_BUNDLE_MARKER, bundle_js)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("family_json", type=Path, nargs="+")
+    parser.add_argument("domain_json", type=Path, nargs="+")
     parser.add_argument("--template", type=Path, required=True)
     parser.add_argument("--bundle", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
-    families = merge_family_json_files(args.family_json)
-    html = build_ui_page_html(args.template.read_text(), args.bundle.read_text(), families)
+    domains = merge_domain_json_files(args.domain_json)
+    html = build_ui_page_html(args.template.read_text(), args.bundle.read_text(), domains)
     args.output.write_text(html)
     print(f"wrote {args.output}")
 
