@@ -310,41 +310,24 @@ DATA=/path/to/tehillim-data/benchmark=trajectory/family=semantic
 
 ## Results UI
 
-`ui/` is a small, tested TypeScript project (vitest + eslint + prettier + tsc --strict),
-structured per [Feature-Sliced Design](https://feature-sliced.design) and enforced by `steiger`
-(`npm run arch-lint`, zero-config FSD rule set):
-
-* `ui/src/*.ts` (`format`, `types`, `validationRow`, `trajectoryColumns`) — the original,
-  domain-agnostic trajectory-formatting library, predating the FSD migration.
-* `ui/src/shared/{ui,lib}/*.ts` — the **shared** layer: generic, business-agnostic pieces
-  (number/pill formatting, sorting, the generic `TableColumn` descriptor, the sorted-table HTML
-  string builder). No slices, just segments, per FSD convention for this layer.
-* `ui/src/widgets/benchmark-table/` — the **widgets** layer, currently the app's only slice: its
-  `model/` segment holds every family/row/filter/column concern (family facets, row filtering,
-  per-table column definitions, row type contracts), and `ui.ts` is the thin, untested
-  (browser-verified instead) DOM-wiring layer, exposed publicly as `initBenchmarkTables()` via the
-  slice's `index.ts`. Everything currently lives in one widget slice because it has exactly one
-  consumer; steiger's `insignificant-slice` rule flags premature entity/feature splits with only
-  one consumer, so those concerns stay merged here until a second consumer (e.g. a future
-  per-representation detail page) justifies splitting them back into their own `entities`/
-  `features` slices.
-* `ui/src/app/index.ts` — the **app** layer: the actual esbuild entry point, bootstrapping the
-  widget onto the page.
-
-`ui_export.export` selects one family's UI columns into `ui_<family>.json`;
-`ui_export.scripts.build_ui_page` then injects the built bundle and every family's JSON into
-`ui/template.html`, filling in an empty six-table placeholder for any family (e.g. `phonology`,
-`discourse`) that has no data yet.
+The actual results page lives in a separate repo,
+[tehillim-ui](https://github.com/rdtaylorjr/tehillim-ui) — a small TypeScript project with no
+dependency on this repo's Python code, only on the JSON files this repo produces. `ui_export.export`
+selects one family's UI columns into `ui_<family>.json`; `ui_export.scripts.build_ui_page` then
+injects a tehillim-ui build (its bundle plus `template.html`) and every family's JSON into one
+final, self-contained `ui.html`, filling in an empty six-table placeholder for any family (e.g.
+`phonology`, `discourse`) that has no data yet.
 
 ```bash
-cd ui && npm install && npm run build && npm run arch-lint && cd ..
+git clone https://github.com/rdtaylorjr/tehillim-ui /path/to/tehillim-ui
+cd /path/to/tehillim-ui && npm install && npm run build && npm run arch-lint && cd -
 .venv/bin/python -m ui_export.scripts.build_ui_page \
   /path/to/tehillim-data/ui_semantic.json \
   /path/to/tehillim-data/ui_lexical.json \
   /path/to/tehillim-data/ui_morphology.json \
   /path/to/tehillim-data/ui_syntax.json \
-  --template ui/template.html \
-  --bundle ui/dist/app.bundle.js \
+  --template /path/to/tehillim-ui/template.html \
+  --bundle /path/to/tehillim-ui/dist/app.bundle.js \
   --output ui.html
 ```
 
@@ -404,6 +387,10 @@ have any variance, since one already-cached run is not worth losing to a single 
 
 * [tehillim-representations](https://github.com/rdtaylorjr/tehillim-embeddings): the embedding vectors
   scored here
+* [tehillim-ui](https://github.com/rdtaylorjr/tehillim-ui): the results page that renders this
+  repo's `ui_<family>.json` output
+* [tehillim-data](https://github.com/rdtaylorjr/tehillim-data): hosts this repo's Parquet/CSV/JSON
+  output
 * [tehillim-parallelism](https://github.com/rdtaylorjr/tehillim-parallelism): the alignment code and
   `parallel_*` Text-Fabric features this benchmark is built from
 * [bhsa](https://github.com/etcbc/bhsa): the core text and linguistic annotation for the Hebrew
