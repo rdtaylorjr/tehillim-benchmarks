@@ -1,4 +1,4 @@
-# tehillim-evaluate
+# tehillim-benchmarks
 
 Evaluates embedding models against scholarly annotations of Psalms parallelism and genre, scoring vectors from
 [tehillim-representations](https://github.com/rdtaylorjr/tehillim-representations) on a retrieval benchmark
