@@ -66,7 +66,7 @@ def test_compare_to_baseline_reports_higher_effect_size_when_true_pairs_are_clos
 
 
 def test_compare_to_baseline_mean_pools_multi_node_spans() -> None:
-    """A member spanning two half-verse nodes must be pooled, not silently dropped."""
+    """A member spanning two colon nodes must be pooled, not silently dropped."""
     true_pairs = as_node_pairs([(1, 2)])
     true_pairs_multi = [((1, 10), (2,))]  # source spans nodes 1 and 10
     baseline_pairs = as_node_pairs([(5, 6)])

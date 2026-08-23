@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 
 from library.bhsa import (
-    list_psalms_half_verse_nodes,
-    list_psalms_half_verses_by_psalm,
+    list_psalms_cola_by_psalm,
+    list_psalms_colon_nodes,
     load_bhsa_api,
     node_to_psalm_map,
     psalms_book_node,
@@ -245,18 +245,18 @@ class TestPsalmsBookNode:
             psalms_book_node(api)
 
 
-class TestListPsalmsHalfVerseNodes:
-    def test_lists_every_half_verse_node_across_all_chapters(self) -> None:
+class TestListPsalmsColonNodes:
+    def test_lists_every_colon_node_across_all_chapters(self) -> None:
         api = _api_with_two_psalms()
 
-        assert list_psalms_half_verse_nodes(api) == [100, 101, 200]
+        assert list_psalms_colon_nodes(api) == [100, 101, 200]
 
 
-class TestListPsalmsHalfVersesByPsalm:
-    def test_groups_half_verse_nodes_by_psalm_number(self) -> None:
+class TestListPsalmsColaByPsalm:
+    def test_groups_colon_nodes_by_psalm_number(self) -> None:
         api = _api_with_two_psalms()
 
-        assert list_psalms_half_verses_by_psalm(api) == {1: [100, 101], 2: [200]}
+        assert list_psalms_cola_by_psalm(api) == {1: [100, 101], 2: [200]}
 
 
 class TestNodeToPsalmMap:

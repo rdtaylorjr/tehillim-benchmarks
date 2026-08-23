@@ -9,8 +9,8 @@ import numpy as np
 
 from library.bhsa import (
     DEFAULT_CHECKOUT,
-    list_psalms_half_verse_nodes,
-    list_psalms_half_verses_by_psalm,
+    list_psalms_cola_by_psalm,
+    list_psalms_colon_nodes,
     node_to_psalm_map,
 )
 from library.calibration import background_similarity_stats
@@ -75,10 +75,10 @@ def main() -> None:
     marked_nodes = {n for p in all_pairs for n in p.source_nodes} | {
         n for p in all_pairs for n in p.target_nodes
     }
-    half_verses_by_psalm = list_psalms_half_verses_by_psalm(api)
-    baseline_pairs = as_node_pairs(build_unmarked_bicola(half_verses_by_psalm, marked_nodes))
-    background_node_ids = [n for n in list_psalms_half_verse_nodes(api) if n not in marked_nodes]
-    node_to_psalm = node_to_psalm_map(half_verses_by_psalm)
+    cola_by_psalm = list_psalms_cola_by_psalm(api)
+    baseline_pairs = as_node_pairs(build_unmarked_bicola(cola_by_psalm, marked_nodes))
+    background_node_ids = [n for n in list_psalms_colon_nodes(api) if n not in marked_nodes]
+    node_to_psalm = node_to_psalm_map(cola_by_psalm)
 
     scopes: dict[str, NodePairs] = {"overall": _as_node_pairs(all_pairs)}
     for ptype in _TYPES:

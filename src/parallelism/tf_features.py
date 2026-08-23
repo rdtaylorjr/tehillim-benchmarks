@@ -26,7 +26,7 @@ def load_api(checkout: str = DEFAULT_CHECKOUT) -> Any:
 
 
 def read_node_feature_values(api: Any) -> dict[int, dict[str, str]]:
-    """Reads every Psalms half-verse node's parallel_* values, skipping nodes with none."""
+    """Reads every Psalms colon node's parallel_* values, skipping nodes with none."""
     F, L = api.F, api.L  # noqa: N806
     book_node = psalms_book_node(api)
 

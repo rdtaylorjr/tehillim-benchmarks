@@ -11,7 +11,7 @@ import numpy as np
 from genre.evaluate import evaluate_genre_discrimination
 from genre.genre_labels import load_genre_by_psalm
 from genre.pairs import GenrePair, build_genre_pairs
-from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verses_by_psalm, load_bhsa_api
+from library.bhsa import DEFAULT_CHECKOUT, list_psalms_cola_by_psalm, load_bhsa_api
 from library.centroid import psalm_centroids
 from library.embeddings import dataset_identifier, load_embeddings
 from library.incremental_cache import load_cached_rows
@@ -54,7 +54,7 @@ def main() -> None:
     api = load_bhsa_api(args.checkout)
     genre_by_psalm = load_genre_by_psalm(args.genre_csv)
     pairs = build_genre_pairs(genre_by_psalm)
-    half_verses_by_psalm = list_psalms_half_verses_by_psalm(api)
+    cola_by_psalm = list_psalms_cola_by_psalm(api)
 
     cached_rows, cached_models = load_cached_rows(args.output) if args.output else ([], set())
     if cached_models:
@@ -67,7 +67,7 @@ def main() -> None:
         if model in cached_models:
             continue
         node_vectors = load_embeddings(path)
-        psalm_vectors_by_model[model] = psalm_centroids(half_verses_by_psalm, node_vectors)
+        psalm_vectors_by_model[model] = psalm_centroids(cola_by_psalm, node_vectors)
 
     new_rows = compare_genre_models(pairs, psalm_vectors_by_model)
     rows = sorted(

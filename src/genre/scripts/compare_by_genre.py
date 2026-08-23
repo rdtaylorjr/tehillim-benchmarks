@@ -18,7 +18,7 @@ from genre.evaluate import evaluate_genre_discrimination_from_matrix
 from genre.genre_labels import load_genre_by_psalm
 from genre.pairs import GenrePair, build_genre_pairs, filter_pairs_by_genre
 from genre.permutation import joint_psalm_label_permutation_test, one_vs_rest_masks
-from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verses_by_psalm, load_bhsa_api
+from library.bhsa import DEFAULT_CHECKOUT, list_psalms_cola_by_psalm, load_bhsa_api
 from library.calibration import background_stats_from_matrix
 from library.centroid import psalm_centroids
 from library.embeddings import dataset_identifier, load_embeddings
@@ -226,7 +226,7 @@ def main() -> None:
     api = load_bhsa_api(args.checkout)
     genre_by_psalm = load_genre_by_psalm(args.genre_csv)
     pairs = build_genre_pairs(genre_by_psalm)
-    half_verses_by_psalm = list_psalms_half_verses_by_psalm(api)
+    cola_by_psalm = list_psalms_cola_by_psalm(api)
     genres = tuple(sorted(set(genre_by_psalm.values())))
 
     cache_path = args.cache or args.output
@@ -242,7 +242,7 @@ def main() -> None:
             continue
         print(f"processing {model}", file=sys.stderr)
         node_vectors = load_embeddings(path)
-        psalm_vectors = psalm_centroids(half_verses_by_psalm, node_vectors)
+        psalm_vectors = psalm_centroids(cola_by_psalm, node_vectors)
         psalm_ids = sorted(set(genre_by_psalm) & set(psalm_vectors))
         try:
             rows.extend(

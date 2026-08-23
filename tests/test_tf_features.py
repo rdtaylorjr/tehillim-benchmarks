@@ -90,7 +90,7 @@ def test_reconstruct_groups_disambiguates_two_instances_sharing_one_group_range(
 
 
 def test_reconstruct_groups_collapses_a_member_spanning_two_nodes() -> None:
-    """A member spanning two half-verses is emitted at both nodes with the same member_id; it
+    """A member spanning two cola is emitted at both nodes with the same member_id; it
     must reconstruct as one occurrence with two nodes, not two separate members.
     """
     node_values = {

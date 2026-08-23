@@ -10,8 +10,8 @@ import pandas as pd
 
 from library.bhsa import (
     DEFAULT_CHECKOUT,
-    list_psalms_half_verse_nodes,
-    list_psalms_half_verses_by_psalm,
+    list_psalms_cola_by_psalm,
+    list_psalms_colon_nodes,
 )
 from library.calibration import BackgroundStats, background_similarity_stats, calibrated_z_score
 from library.embeddings import dataset_identifier, load_embeddings
@@ -179,10 +179,10 @@ def main() -> None:
     marked_nodes = {n for p in all_pairs for n in p.source_nodes} | {
         n for p in all_pairs for n in p.target_nodes
     }
-    half_verses_by_psalm = list_psalms_half_verses_by_psalm(api)
-    baseline_pairs_raw = build_unmarked_bicola(half_verses_by_psalm, marked_nodes)
+    cola_by_psalm = list_psalms_cola_by_psalm(api)
+    baseline_pairs_raw = build_unmarked_bicola(cola_by_psalm, marked_nodes)
     baseline_pairs = as_node_pairs(baseline_pairs_raw)
-    background_node_ids = [n for n in list_psalms_half_verse_nodes(api) if n not in marked_nodes]
+    background_node_ids = [n for n in list_psalms_colon_nodes(api) if n not in marked_nodes]
 
     (cached_pair_rows, cached_baseline_rows, cached_scope_rows), cached_models = load_cached_detail(
         args.output_dir

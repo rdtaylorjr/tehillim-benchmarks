@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verses_by_psalm, load_bhsa_api
+from library.bhsa import DEFAULT_CHECKOUT, list_psalms_cola_by_psalm, load_bhsa_api
 from library.centroid import psalm_centroids
 from library.embeddings import dataset_identifier, load_embeddings
 from library.incremental_cache import load_cached_parquet_set
@@ -98,7 +98,7 @@ def main() -> None:
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
     api = load_bhsa_api(args.checkout)
-    half_verses_by_psalm = list_psalms_half_verses_by_psalm(api)
+    cola_by_psalm = list_psalms_cola_by_psalm(api)
 
     (cached_distance_rows,), cached_models = load_cached_parquet_set(
         args.output_dir, ("trajectory_distances.parquet",)
@@ -115,8 +115,8 @@ def main() -> None:
             continue
         print(f"processing {model}")
         node_vectors = load_embeddings(path)
-        sequences_by_psalm = psalm_cola_sequences(half_verses_by_psalm, node_vectors)
-        centroids_by_psalm = psalm_centroids(half_verses_by_psalm, node_vectors)
+        sequences_by_psalm = psalm_cola_sequences(cola_by_psalm, node_vectors)
+        centroids_by_psalm = psalm_centroids(cola_by_psalm, node_vectors)
         profiles = compute_psalm_profiles(sequences_by_psalm, centroids_by_psalm)
         rows = profile_rows(model, profiles)
         pd.DataFrame(rows).to_parquet(
