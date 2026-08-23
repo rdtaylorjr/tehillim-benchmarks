@@ -1,13 +1,14 @@
 """Reads a prior scoring run's output CSV so already-scored models can be skipped on rerun."""
 
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
 
 def load_cached_rows(
     cache_path: Path, columns: tuple[str, ...] | None = None
-) -> tuple[list[dict], set[str]]:
+) -> tuple[list[dict[str, Any]], set[str]]:
     """Reads a prior output CSV's rows (optionally a column subset) and its covered model set."""
     if not cache_path.exists():
         return [], set()
@@ -20,9 +21,9 @@ def load_cached_rows(
 
 def load_cached_parquet_set(
     output_dir: Path, filenames: tuple[str, ...]
-) -> tuple[list[list[dict]], set[str]]:
+) -> tuple[list[list[dict[str, Any]]], set[str]]:
     """Reads several prior output parquet files' rows and the model set covered by all of them."""
-    rows_by_file: list[list[dict]] = []
+    rows_by_file: list[list[dict[str, Any]]] = []
     models: set[str] | None = None
     for name in filenames:
         path = output_dir / name

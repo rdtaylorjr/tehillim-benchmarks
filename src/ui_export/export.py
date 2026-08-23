@@ -4,6 +4,7 @@ import argparse
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -63,7 +64,7 @@ def _drop_shuffle_control_models(df: pd.DataFrame) -> pd.DataFrame:
     return df[~df["model"].str.contains(_SHUFFLE_CONTROL_MODEL, regex=True)]
 
 
-def _drop_shuffle_control_rows(rows: list[dict]) -> list[dict]:
+def _drop_shuffle_control_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Same exclusion as _drop_shuffle_control_models, for a plain row-dict list."""
     return [row for row in rows if not re.search(_SHUFFLE_CONTROL_MODEL, row.get("model", ""))]
 
@@ -82,9 +83,9 @@ def build_domain_data(
     parallelism_by_type_df: pd.DataFrame,
     genre_overall_df: pd.DataFrame,
     genre_by_genre_df: pd.DataFrame,
-    trajectory_rows: list[dict],
-    trajectory_by_genre_rows: list[dict] | None = None,
-) -> dict:
+    trajectory_rows: list[dict[str, Any]],
+    trajectory_by_genre_rows: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """One domain's UI payload: the 6 tables the UI's tabs render."""
     parallelism_overall_df = _drop_shuffle_control_models(
         _drop_psalm_level_models(parallelism_overall_df)

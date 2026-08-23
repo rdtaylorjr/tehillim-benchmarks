@@ -9,11 +9,28 @@ import numpy as np
 
 from genre.evaluate import evaluate_genre_discrimination
 from genre.genre_labels import load_genre_by_psalm
-from genre.pairs import build_genre_pairs, filter_pairs_by_genre
+from genre.pairs import GenrePair, build_genre_pairs, filter_pairs_by_genre
 from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verses_by_psalm, load_bhsa_api
 from library.centroid import psalm_centroids
 from library.embeddings import load_embeddings
 from library.order_shuffle import order_shuffle_result
+
+
+def score_genre_ap(
+    path: Path,
+    half_verses_by_psalm: dict[int, list[int]],
+    pairs: list[GenrePair],
+    genres: list[str],
+) -> dict[str, float]:
+    """Per-genre Average Precision (no permutation testing) for one embeddings file."""
+    node_vectors = load_embeddings(path)
+    vectors = psalm_centroids(half_verses_by_psalm, node_vectors)
+    return {
+        genre: evaluate_genre_discrimination(
+            filter_pairs_by_genre(pairs, genre), vectors
+        ).average_precision
+        for genre in genres
+    }
 
 
 def main() -> None:
@@ -35,22 +52,12 @@ def main() -> None:
     pairs = build_genre_pairs(genre_by_psalm)
     genres = sorted(set(genre_by_psalm.values()))
 
-    def score(path: Path) -> dict[str, float]:
-        node_vectors = load_embeddings(path)
-        vectors = psalm_centroids(half_verses_by_psalm, node_vectors)
-        return {
-            genre: evaluate_genre_discrimination(
-                filter_pairs_by_genre(pairs, genre), vectors
-            ).average_precision
-            for genre in genres
-        }
-
-    real_ap = score(args.real_embeddings)
+    real_ap = score_genre_ap(args.real_embeddings, half_verses_by_psalm, pairs, genres)
     shuffled_paths = sorted(args.shuffled_embeddings_dir.glob("**/*.parquet"))
     shuffled_ap: dict[str, list[float]] = {genre: [] for genre in genres}
     for path in shuffled_paths:
         print(f"scoring {path.parent.name}", file=sys.stderr)
-        scores = score(path)
+        scores = score_genre_ap(path, half_verses_by_psalm, pairs, genres)
         for genre in genres:
             shuffled_ap[genre].append(scores[genre])
 

@@ -4,6 +4,7 @@ psalm-label permutation p-values (naive Mann-Whitney, permuted, and Westfall-You
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -163,12 +164,12 @@ def compare_model_across_genres_sparse(
     )
 
 
-def load_cached_rows(cache_path: Path) -> tuple[list[dict], set[str]]:
+def load_cached_rows(cache_path: Path) -> tuple[list[dict[str, Any]], set[str]]:
     """Reads a prior output CSV's raw rows (dropping stale q-values) and its covered model set."""
     return _load_cached_rows(cache_path, columns=_RAW_COLUMNS)
 
 
-def add_fdr_columns(rows: list[dict]) -> pd.DataFrame:
+def add_fdr_columns(rows: list[dict[str, Any]]) -> pd.DataFrame:
     """Adds BH/BY q-values to each of the three p-value sources, scoped per genre's model family."""
     df = pd.DataFrame(rows)
     long_parts = [

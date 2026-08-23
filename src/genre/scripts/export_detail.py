@@ -3,6 +3,7 @@
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -20,7 +21,7 @@ from library.retrieval_metrics import paired_cosine_similarity
 _OUTPUT_FILES = ("genre_pair_detail.parquet", "genre_summary.parquet")
 
 
-def load_cached_detail(output_dir: Path) -> tuple[list[list[dict]], set[str]]:
+def load_cached_detail(output_dir: Path) -> tuple[list[list[dict[str, Any]]], set[str]]:
     """Reads prior detail parquet files' rows and the model set already covered by both."""
     return load_cached_parquet_set(output_dir, _OUTPUT_FILES)
 
@@ -30,7 +31,7 @@ def build_pair_detail_rows(
     pairs: list[GenrePair],
     psalm_vectors: dict[int, np.ndarray],
     background: BackgroundStats,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """One row per usable pair: raw similarity, calibrated z, and whether the pair is same-genre.
 
     Never includes genre_a/genre_b: together with psalm_a/psalm_b those would reconstruct the
@@ -61,7 +62,7 @@ def build_summary_rows(
     pairs: list[GenrePair],
     psalm_vectors: dict[int, np.ndarray],
     background: BackgroundStats,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """Single-row-per-model AP/AUC/calibration summary, wrapping compare_genre_calibrated."""
     result = compare_genre_calibrated(pairs, psalm_vectors, background)
     return [
@@ -103,8 +104,8 @@ def main() -> None:
         print(f"reusing {len(cached_models)} cached models from {args.output_dir}", file=sys.stderr)
 
     model_paths = sorted(p for p in args.embeddings_dir.glob("**/*.parquet") if p.is_file())
-    pair_rows: list[dict] = list(cached_pair_rows)
-    summary_rows: list[dict] = list(cached_summary_rows)
+    pair_rows: list[dict[str, Any]] = list(cached_pair_rows)
+    summary_rows: list[dict[str, Any]] = list(cached_summary_rows)
     for path in model_paths:
         model = dataset_identifier(path)
         if model in cached_models:

@@ -3,6 +3,7 @@
 import argparse
 import json
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -24,15 +25,15 @@ _FIELDS = (
 )
 
 
-def trajectory_ui_rows(validation_df: pd.DataFrame) -> list[dict]:
+def trajectory_ui_rows(validation_df: pd.DataFrame) -> list[dict[str, Any]]:
     """One UI row per validation.csv row, with model split into model_base/text_variant."""
     split = validation_df["model"].map(split_model_name)
     df = validation_df.assign(
         model_base=[base for base, _ in split], text_variant=[variant for _, variant in split]
     )
-    rows: list[dict] = df[["model", "model_base", "text_variant", "metric", *_FIELDS]].to_dict(
-        "records"
-    )
+    rows: list[dict[str, Any]] = df[
+        ["model", "model_base", "text_variant", "metric", *_FIELDS]
+    ].to_dict("records")
     return rows
 
 
@@ -49,13 +50,13 @@ _BY_GENRE_FIELDS = (
 )
 
 
-def trajectory_by_genre_ui_rows(breakdown_df: pd.DataFrame) -> list[dict]:
+def trajectory_by_genre_ui_rows(breakdown_df: pd.DataFrame) -> list[dict[str, Any]]:
     """One UI row per validate_against_genre_by_genre.csv row, model split as above."""
     split = breakdown_df["model"].map(split_model_name)
     df = breakdown_df.assign(
         model_base=[base for base, _ in split], text_variant=[variant for _, variant in split]
     )
-    rows: list[dict] = df[
+    rows: list[dict[str, Any]] = df[
         ["model", "model_base", "text_variant", "metric", *_BY_GENRE_FIELDS]
     ].to_dict("records")
     return rows

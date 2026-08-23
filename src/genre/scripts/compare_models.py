@@ -19,9 +19,9 @@ from library.incremental_cache import load_cached_rows
 
 def compare_genre_models(
     pairs: list[GenrePair], psalm_vectors_by_model: dict[str, dict[int, np.ndarray]]
-) -> list[dict]:
+) -> list[dict[str, str | int | float]]:
     """Evaluates every model's psalm centroids against the same genre pairs, sorted by AP."""
-    rows = []
+    rows: list[dict[str, str | int | float]] = []
     for model, psalm_vectors in psalm_vectors_by_model.items():
         report = evaluate_genre_discrimination(pairs, psalm_vectors)
         rows.append(

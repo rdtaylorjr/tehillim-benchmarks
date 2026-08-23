@@ -3,6 +3,7 @@
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -41,7 +42,7 @@ _TYPES = frozenset({"Synonymous", "Staircase", "Emblematic", "Synthetic", "Antit
 _OUTPUT_FILES = ("pair_detail.parquet", "baseline_detail.parquet", "type_vs_baseline.parquet")
 
 
-def load_cached_detail(output_dir: Path) -> tuple[list[list[dict]], set[str]]:
+def load_cached_detail(output_dir: Path) -> tuple[list[list[dict[str, Any]]], set[str]]:
     """Reads prior detail parquet files' rows and the model set already covered by all three."""
     return load_cached_parquet_set(output_dir, _OUTPUT_FILES)
 
@@ -55,7 +56,7 @@ def build_pair_detail_rows(
     pairs: list[RetrievalPair],
     node_vectors: dict[int, np.ndarray],
     background: BackgroundStats,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """One row per pair: raw similarity, per-pair calibrated z, and bidirectional rank."""
     source_vecs = build_side_vectors(pairs, "source", node_vectors)
     target_vecs = build_side_vectors(pairs, "target", node_vectors)
@@ -101,7 +102,7 @@ def build_baseline_detail_rows(
     baseline_pairs: list[tuple[int, int]],
     node_vectors: dict[int, np.ndarray],
     background: BackgroundStats,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """One row per unmarked adjacent bicolon: raw similarity and calibrated z, no rank."""
     source_vecs = np.stack([node_vectors[a] for a, _ in baseline_pairs])
     target_vecs = np.stack([node_vectors[b] for _, b in baseline_pairs])
@@ -145,7 +146,7 @@ def build_type_vs_baseline_rows(
     baseline_pairs: NodePairs,
     node_vectors: dict[int, np.ndarray],
     background: BackgroundStats,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     """One row per (model, scope): each of the 5 Lowth parallelism types alone, plus overall."""
     rows = []
     for ptype in sorted(_TYPES):
@@ -190,9 +191,9 @@ def main() -> None:
         print(f"reusing {len(cached_models)} cached models from {args.output_dir}", file=sys.stderr)
 
     model_paths = sorted(p for p in args.embeddings_dir.glob("**/*.parquet") if p.is_file())
-    pair_rows: list[dict] = list(cached_pair_rows)
-    baseline_rows: list[dict] = list(cached_baseline_rows)
-    scope_rows: list[dict] = list(cached_scope_rows)
+    pair_rows: list[dict[str, Any]] = list(cached_pair_rows)
+    baseline_rows: list[dict[str, Any]] = list(cached_baseline_rows)
+    scope_rows: list[dict[str, Any]] = list(cached_scope_rows)
     for path in model_paths:
         model = dataset_identifier(path)
         if model in cached_models:

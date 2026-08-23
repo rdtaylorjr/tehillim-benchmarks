@@ -120,14 +120,14 @@ def build_validation_row(
     n_cola: dict[int, int],
     n_permutations: int,
     seed: int,
-) -> dict:
+) -> dict[str, str | int | float]:
     """One (model, metric) row of gap+p per source in _SOURCES, excluding NaN-valued pairs."""
     subset, idx_a, idx_b, length_diff = _subset_and_length_diff(
         metric, base_subset, index_of, n_cola
     )
     same_genre = genre_labels[idx_a] == genre_labels[idx_b]
 
-    row: dict = {
+    row: dict[str, str | int | float] = {
         "model": model,
         "metric": metric,
         "n_pairs_total": len(base_subset),
@@ -172,7 +172,7 @@ def build_genre_breakdown_rows(
     n_cola: dict[int, int],
     n_permutations: int,
     seed: int,
-) -> list[dict]:
+) -> list[dict[str, str | int | float]]:
     """One row per (genre, available source): one-vs-rest distance gap, perm p, and maxT p."""
     subset, idx_a, idx_b, length_diff = _subset_and_length_diff(
         metric, base_subset, index_of, n_cola
@@ -184,7 +184,7 @@ def build_genre_breakdown_rows(
     genres = tuple(genres_array.tolist())
     values_by_source = _values_by_source(metric, subset, length_diff)
 
-    rows: list[dict] = []
+    rows: list[dict[str, str | int | float]] = []
     for source in _SOURCES:
         values = values_by_source[source]
         if values is None:
@@ -215,7 +215,7 @@ def build_genre_breakdown_rows(
     return rows
 
 
-def add_fdr_columns(rows: list[dict]) -> pd.DataFrame:
+def add_fdr_columns(rows: list[dict[str, str | int | float]]) -> pd.DataFrame:
     """Adds BH/BY q-values to every source's p-values, corrected within each metric's family."""
     df = pd.DataFrame(rows)
     long_parts = [
@@ -248,7 +248,7 @@ def add_fdr_columns(rows: list[dict]) -> pd.DataFrame:
     return result
 
 
-def add_genre_breakdown_fdr_columns(rows: list[dict]) -> pd.DataFrame:
+def add_genre_breakdown_fdr_columns(rows: list[dict[str, str | int | float]]) -> pd.DataFrame:
     """Adds BH/BY q-values to p_perm/p_maxT, corrected across models within each (metric, source,
 
     genre) family, mirroring compare_by_genre.py's per-genre-across-models correction scope.
@@ -288,7 +288,7 @@ def main() -> None:
     distances_df = pd.read_parquet(args.distances_parquet)
 
     rows = []
-    all_breakdown_rows: list[dict] = []
+    all_breakdown_rows: list[dict[str, str | int | float]] = []
     for model, group in distances_df.groupby("model"):
         psalms = sorted(set(group["psalm_a"]) | set(group["psalm_b"]))
         usable_psalms = [p for p in psalms if p in genre_by_psalm]

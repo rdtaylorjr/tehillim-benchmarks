@@ -22,7 +22,7 @@ def compare_true_similarity(
     pairs: list[RetrievalPair],
     node_vectors_by_model: dict[str, dict[int, np.ndarray]],
     background_node_ids: list[int],
-) -> list[dict]:
+) -> list[dict[str, str | int | float]]:
     """One row per model: raw and calibrated true-pair similarity, overall and per type."""
     rows: list[dict[str, str | int | float]] = []
     for model, node_vectors in node_vectors_by_model.items():

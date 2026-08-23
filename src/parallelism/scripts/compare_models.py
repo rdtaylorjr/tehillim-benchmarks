@@ -21,14 +21,14 @@ def compare_models(
     node_vectors_by_model: dict[str, dict[int, np.ndarray]],
     n_permutations: int = 2000,
     seed: int = 0,
-) -> list[dict]:
+) -> list[dict[str, str | int | float]]:
     """Evaluates every model's vectors against the same pairs; rows sorted by separation AUC."""
-    rows = []
+    rows: list[dict[str, str | int | float]] = []
     for model, node_vectors in node_vectors_by_model.items():
         rng = np.random.default_rng(seed)
         model_pairs = filter_pairs_with_vectors(pairs, node_vectors)
         report = run_evaluation(model_pairs, node_vectors, n_permutations=n_permutations, rng=rng)
-        row = {
+        row: dict[str, str | int | float] = {
             "model": model,
             "n_pairs": report.n_pairs,
             "separation_auc": report.separation.auc,

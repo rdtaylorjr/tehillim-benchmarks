@@ -4,6 +4,7 @@ import argparse
 import sys
 from itertools import combinations
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -36,7 +37,7 @@ def compute_psalm_profiles(
     return profiles
 
 
-def profile_rows(model: str, profiles: dict[int, dict[str, np.ndarray]]) -> list[dict]:
+def profile_rows(model: str, profiles: dict[int, dict[str, np.ndarray]]) -> list[dict[str, Any]]:
     """Flattens each psalm's profile into one row: the real, un-resampled cola sequence."""
     rows = []
     for psalm, profile in profiles.items():
@@ -54,7 +55,7 @@ def profile_rows(model: str, profiles: dict[int, dict[str, np.ndarray]]) -> list
     return rows
 
 
-def distance_rows(model: str, profiles: dict[int, dict[str, np.ndarray]]) -> list[dict]:
+def distance_rows(model: str, profiles: dict[int, dict[str, np.ndarray]]) -> list[dict[str, Any]]:
     """One row per unordered psalm pair: content, structural, and geometry-curve DTW distances."""
     self_similarity = {p: self_similarity_matrix(v["sequence"]) for p, v in profiles.items()}
     adjacent = {p: adjacent_similarity(v["sequence"]) for p, v in profiles.items()}
@@ -106,7 +107,7 @@ def main() -> None:
         print(f"reusing {len(cached_models)} cached models from {args.output_dir}", file=sys.stderr)
 
     model_paths = sorted(p for p in args.embeddings_dir.glob("**/*.parquet") if p.is_file())
-    all_distance_rows: list[dict] = list(cached_distance_rows)
+    all_distance_rows: list[dict[str, Any]] = list(cached_distance_rows)
     n_profile_rows = 0
     for path in model_paths:
         model = dataset_identifier(path)
