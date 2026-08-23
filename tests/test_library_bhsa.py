@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 
 import pytest
 
@@ -197,6 +198,7 @@ class TestLoadBhsaApi:
 
     def test_passes_the_mod_org_and_repo_to_the_local_clone_locations(self) -> None:
         captured_locations = []
+        captured_mods = []
 
         def fake_fabric_class(*, locations: list[str], silent: str) -> object:
             captured_locations.append(locations)
@@ -207,8 +209,17 @@ class TestLoadBhsaApi:
 
             return _FakeTF()
 
-        load_bhsa_api(mod="rdtaylorjr/tehillim-parallelism/tf:v1.0", fabric_class=fake_fabric_class)
+        def fake_mod_cache_location_fn(mod: str) -> Path:
+            captured_mods.append(mod)
+            return Path("/fake/mod/cache/location")
 
+        load_bhsa_api(
+            mod="rdtaylorjr/tehillim-logos/tf:v1.0",
+            fabric_class=fake_fabric_class,
+            mod_cache_location_fn=fake_mod_cache_location_fn,
+        )
+
+        assert captured_mods == ["rdtaylorjr/tehillim-logos/tf:v1.0"]
         assert len(captured_locations) == 1
         assert len(captured_locations[0]) == 2
 

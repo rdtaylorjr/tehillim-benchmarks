@@ -50,11 +50,13 @@ def _mod_cache_location(mod: str) -> Path:
     return versions[-1]
 
 
-def _load_from_local_clone(mod: str | None, fabric_class: Callable[..., Any]) -> Any:
+def _load_from_local_clone(
+    mod: str | None, fabric_class: Callable[..., Any], mod_cache_location_fn: Callable[[str], Path]
+) -> Any:
     """Loads BHSA from its full local clone, plus an optional companion module's local cache."""
     locations = [str(_BHSA_CLONE_LOCATION)]
     if mod is not None:
-        locations.append(str(_mod_cache_location(mod)))
+        locations.append(str(mod_cache_location_fn(mod)))
     tf = fabric_class(locations=locations, silent="deep")
     return tf.loadAll(silent="deep")
 
@@ -65,10 +67,11 @@ def load_bhsa_api(
     use_fn: Callable[..., Any] = _real_use,
     fabric_class: Callable[..., Any] = _RealFabric,
     timeout_seconds: float = DEFAULT_USE_TIMEOUT_SECONDS,
+    mod_cache_location_fn: Callable[[str], Path] = _mod_cache_location,
 ) -> Any:
     """Loads BHSA plus an optional companion module from the local clone; falls back to use()."""
     try:
-        api = _load_from_local_clone(mod, fabric_class)
+        api = _load_from_local_clone(mod, fabric_class, mod_cache_location_fn)
     except Exception:
         api = None
     if api is None:
