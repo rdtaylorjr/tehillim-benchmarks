@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[dev]"
+      - run: ruff check .
+      - run: ruff format --check .
+      - run: mypy --strict src
+      - run: pytest -q
+
+  vulnerability-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e "."
+      - run: pip install pip-audit
+      - run: pip-audit
+
+  version-bump:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: |
+          BASE_VERSION=$(git show "origin/${{ github.base_ref }}:pyproject.toml" | grep -m1 '^version = ')
+          HEAD_VERSION=$(grep -m1 '^version = ' pyproject.toml)
+          if [ "$BASE_VERSION" = "$HEAD_VERSION" ]; then
+            echo "pyproject.toml's version must be bumped from $BASE_VERSION before merging."
+            exit 1
+          fi
+          echo "Version bumped: $BASE_VERSION -> $HEAD_VERSION"

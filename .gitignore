@@ -18,5 +18,7 @@ __pycache__/
 .ruff_cache/
 .idea/
 results/
+.coverage
+htmlcov/
 
 CLAUDE.md
