@@ -2,9 +2,8 @@
 
 Evaluates embedding models against scholarly annotations of Psalms parallelism and genre, scoring vectors from
 [tehillim-embeddings](https://github.com/rdtaylorjr/tehillim-embeddings) on a retrieval benchmark
-built from [tehillim-logos](https://github.com/rdtaylorjr/tehillim-logos)'s aligned
-`parallel_*` Text-Fabric features. Consumes both as pure data dependencies, never as code
-dependencies.
+built from aligned `parallel_*` Text-Fabric features. Consumes both as pure data dependencies,
+never as code dependencies.
 
 ## Data sources
 
@@ -391,8 +390,6 @@ have any variance, since one already-cached run is not worth losing to a single 
   repo's `ui_<domain>.json` output
 * [tehillim-data](https://github.com/rdtaylorjr/tehillim-data): hosts this repo's Parquet/CSV/JSON
   output
-* [tehillim-logos](https://github.com/rdtaylorjr/tehillim-logos): the alignment code and
-  `parallel_*` Text-Fabric features this benchmark is built from
 * [bhsa](https://github.com/etcbc/bhsa): the core text and linguistic annotation for the Hebrew
   Bible
 
