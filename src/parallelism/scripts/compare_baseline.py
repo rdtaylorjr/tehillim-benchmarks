@@ -12,8 +12,8 @@ from sklearn.metrics import average_precision_score
 
 from library.bhsa import (
     DEFAULT_CHECKOUT,
-    list_psalms_half_verse_nodes,
-    list_psalms_half_verses_by_psalm,
+    list_psalms_cola_by_psalm,
+    list_psalms_colon_nodes,
 )
 from library.calibration import BackgroundStats, background_similarity_stats, calibrated_effect_size
 from library.embeddings import dataset_identifier, load_embeddings
@@ -120,9 +120,9 @@ def main() -> None:
     marked_nodes = {n for p in retrieval_pairs for n in p.source_nodes} | {
         n for p in retrieval_pairs for n in p.target_nodes
     }
-    half_verses_by_psalm = list_psalms_half_verses_by_psalm(api)
-    baseline_pairs = as_node_pairs(build_unmarked_bicola(half_verses_by_psalm, marked_nodes))
-    background_node_ids = [n for n in list_psalms_half_verse_nodes(api) if n not in marked_nodes]
+    cola_by_psalm = list_psalms_cola_by_psalm(api)
+    baseline_pairs = as_node_pairs(build_unmarked_bicola(cola_by_psalm, marked_nodes))
+    background_node_ids = [n for n in list_psalms_colon_nodes(api) if n not in marked_nodes]
 
     rows, cached_models = load_cached_rows(args.output) if args.output else ([], set())
     if cached_models:

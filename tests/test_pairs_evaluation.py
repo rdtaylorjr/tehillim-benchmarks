@@ -104,7 +104,7 @@ def test_build_retrieval_pairs_drops_a_pair_flagged_ambiguous() -> None:
 
 
 def test_build_retrieval_pairs_drops_a_pair_whose_members_share_one_node() -> None:
-    """A resumptive member repeating within the same half-verse isn't a meaningful pair."""
+    """A resumptive member repeating within the same colon isn't a meaningful pair."""
     groups = [_group("AB", (0, 1), ("A", "B"), ((100,), (100,)))]
 
     pairs = build_retrieval_pairs(groups)

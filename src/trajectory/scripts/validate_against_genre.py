@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 from genre.genre_labels import load_genre_by_psalm
-from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verses_by_psalm, load_bhsa_api
+from library.bhsa import DEFAULT_CHECKOUT, list_psalms_cola_by_psalm, load_bhsa_api
 from library.multiple_comparisons import add_fdr_q_values, benjamini_hochberg, benjamini_yekutieli
 from trajectory.genre_breakdown import joint_genre_breakdown_permutation_test
 
@@ -283,7 +283,7 @@ def main() -> None:
     args = parser.parse_args()
 
     api = load_bhsa_api(args.checkout)
-    n_cola = {p: len(nodes) for p, nodes in list_psalms_half_verses_by_psalm(api).items()}
+    n_cola = {p: len(nodes) for p, nodes in list_psalms_cola_by_psalm(api).items()}
     genre_by_psalm = load_genre_by_psalm(args.genre_csv)
     distances_df = pd.read_parquet(args.distances_parquet)
 

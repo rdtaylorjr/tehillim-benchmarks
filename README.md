@@ -45,7 +45,7 @@ level is the positive-class prevalence, not 0.5, so raw AP is comparable across 
 scope but never across scopes with different true:baseline ratios.
 
 A separate negative control (`parallelism.baseline`) compares true-pair similarity against adjacent
-half-verse bicola never annotated as parallel, to check whether elevated similarity is specific to
+colon bicola never annotated as parallel, to check whether elevated similarity is specific to
 genuine parallelism or reflects generic topical continuity between neighboring lines. Results are
 reported per Lowth's original typology (Lowth 1778: synonymous, antithetic, synthetic) as extended
 by later scholarship (staircase/climactic, emblematic), each type reported separately.
@@ -88,7 +88,7 @@ their embedding inputs and their statistical machinery (`src/library`).
 
 Every one of the C(150, 2) = 11,175 psalm pairs is scored: `genre.pairs.build_genre_pairs` labels a
 pair `same_genre` when both psalms carry the same genre. Each psalm's vector is the mean of
-its half-verse embeddings (`genre.centroid.psalm_centroids`). Average Precision and AUC are
+its colon embeddings (`genre.centroid.psalm_centroids`). Average Precision and AUC are
 computed exactly as in the parallelism benchmark (`genre.evaluate.evaluate_genre_discrimination`),
 ranking same-genre pairs against different-genre pairs by cosine similarity.
 
@@ -162,7 +162,7 @@ units: `homograph` (bare consonantal spelling, BHSA's `lex0`), `lexeme` (disambi
 dictionary entry, BHSA's `lex`), and `word` (the inflected surface form, in `consonantal`,
 `vocalized`, and `cantillation` text tiers). They score against the same parallelism and genre
 benchmarks above, through the same evaluation code, no separate pipeline. Two architectural
-variants exist for the positional/recurrence weightings: colon-level (each half-verse's vector
+variants exist for the positional/recurrence weightings: colon-level (each colon's vector
 distinct, correct for parallelism's pairwise colon comparison) and psalm-broadcast (one
 whole-psalm vector repeated across its colons, correct for genre's mean-pooled psalm centroid),
 documented in `tehillim-embeddings`'s README. Parallelism-scoped UI tables exclude

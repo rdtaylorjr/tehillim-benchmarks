@@ -93,8 +93,8 @@ def psalms_book_node(api: Any) -> Any:
     return book_nodes[0]
 
 
-def list_psalms_half_verse_nodes(api: Any) -> list[int]:
-    """Lists every half-verse node in Psalms, in canonical order."""
+def list_psalms_colon_nodes(api: Any) -> list[int]:
+    """Lists every colon node in Psalms, in canonical order."""
     L = api.L  # noqa: N806
     book_node = psalms_book_node(api)
     return [
@@ -104,8 +104,8 @@ def list_psalms_half_verse_nodes(api: Any) -> list[int]:
     ]
 
 
-def list_psalms_half_verses_by_psalm(api: Any) -> dict[int, list[int]]:
-    """Lists every half-verse node, grouped and ordered by psalm number (BHSA chapter)."""
+def list_psalms_cola_by_psalm(api: Any) -> dict[int, list[int]]:
+    """Lists every colon node, grouped and ordered by psalm number (BHSA chapter)."""
     L, T = api.L, api.T  # noqa: N806
     book_node = psalms_book_node(api)
     result: dict[int, list[int]] = {}
@@ -115,6 +115,6 @@ def list_psalms_half_verses_by_psalm(api: Any) -> dict[int, list[int]]:
     return result
 
 
-def node_to_psalm_map(half_verses_by_psalm: dict[int, list[int]]) -> dict[int, int]:
+def node_to_psalm_map(cola_by_psalm: dict[int, list[int]]) -> dict[int, int]:
     """Inverts a psalm-to-nodes mapping into a node-to-psalm lookup."""
-    return {node: psalm for psalm, nodes in half_verses_by_psalm.items() for node in nodes}
+    return {node: psalm for psalm, nodes in cola_by_psalm.items() for node in nodes}

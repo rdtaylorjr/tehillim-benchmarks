@@ -28,36 +28,36 @@ class TestScoreGenreAp:
         # Psalms 1-2 share Lament, psalms 3-4 share Praise: two tight clusters, well separated.
         genre_by_psalm = {1: "Lament", 2: "Lament", 3: "Praise", 4: "Praise"}
         pairs = build_genre_pairs(genre_by_psalm)
-        half_verses_by_psalm = {1: [10], 2: [11], 3: [12], 4: [13]}
+        cola_by_psalm = {1: [10], 2: [11], 3: [12], 4: [13]}
         path = tmp_path / "embeddings.parquet"
         _write_parquet(
             path,
             {10: [1.0, 0.0], 11: [1.0, 0.0], 12: [0.0, 1.0], 13: [0.0, 1.0]},
         )
 
-        scores = score_genre_ap(path, half_verses_by_psalm, pairs, ["Lament", "Praise"])
+        scores = score_genre_ap(path, cola_by_psalm, pairs, ["Lament", "Praise"])
 
         assert scores == {"Lament": 1.0, "Praise": 1.0}
 
     def test_returns_one_score_per_requested_genre(self, tmp_path: Path) -> None:
         genre_by_psalm = {1: "Lament", 2: "Lament", 3: "Praise", 4: "Praise"}
         pairs = build_genre_pairs(genre_by_psalm)
-        half_verses_by_psalm = {1: [10], 2: [11], 3: [12], 4: [13]}
+        cola_by_psalm = {1: [10], 2: [11], 3: [12], 4: [13]}
         path = tmp_path / "embeddings.parquet"
         _write_parquet(
             path,
             {10: [1.0, 0.0], 11: [1.0, 0.0], 12: [0.0, 1.0], 13: [0.0, 1.0]},
         )
 
-        scores = score_genre_ap(path, half_verses_by_psalm, pairs, ["Lament", "Praise"])
+        scores = score_genre_ap(path, cola_by_psalm, pairs, ["Lament", "Praise"])
 
         assert set(scores) == {"Lament", "Praise"}
 
-    def test_pools_a_psalm_s_half_verse_vectors_into_one_centroid(self, tmp_path: Path) -> None:
-        # Psalm 1's two half-verses average to [1,0], matching psalm 2 exactly: still perfect AP.
+    def test_pools_a_psalm_s_colon_vectors_into_one_centroid(self, tmp_path: Path) -> None:
+        # Psalm 1's two cola average to [1,0], matching psalm 2 exactly: still perfect AP.
         genre_by_psalm = {1: "Lament", 2: "Lament", 3: "Praise", 4: "Praise"}
         pairs = build_genre_pairs(genre_by_psalm)
-        half_verses_by_psalm = {1: [10, 11], 2: [12], 3: [13], 4: [14]}
+        cola_by_psalm = {1: [10, 11], 2: [12], 3: [13], 4: [14]}
         path = tmp_path / "embeddings.parquet"
         _write_parquet(
             path,
@@ -70,6 +70,6 @@ class TestScoreGenreAp:
             },
         )
 
-        scores = score_genre_ap(path, half_verses_by_psalm, pairs, ["Lament", "Praise"])
+        scores = score_genre_ap(path, cola_by_psalm, pairs, ["Lament", "Praise"])
 
         assert scores["Lament"] == 1.0

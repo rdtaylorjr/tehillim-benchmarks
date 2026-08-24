@@ -11,6 +11,9 @@ def _parallelism_overall_df() -> pd.DataFrame:
                 "model_base": "bge_m3",
                 "text_variant": "vocalized",
                 "separation_auc": 0.66,
+                "separation_p_q": 0.03,
+                "auc_vs_baseline": 0.58,
+                "p_vs_baseline_q": 0.04,
                 "average_precision": 0.33,
                 "calibrated_effect_size": 0.44,
                 "mrr_forward": 0.06,
@@ -22,6 +25,9 @@ def _parallelism_overall_df() -> pd.DataFrame:
                 "model_base": "form_icf_posmean_psalm",
                 "text_variant": "unknown",
                 "separation_auc": 0.99,
+                "separation_p_q": 0.001,
+                "auc_vs_baseline": 0.95,
+                "p_vs_baseline_q": 0.001,
                 "average_precision": 0.98,
                 "calibrated_effect_size": 5.0,
                 "mrr_forward": 0.9,
@@ -41,8 +47,13 @@ def _parallelism_by_type_df() -> pd.DataFrame:
                 "text_variant": "vocalized",
                 "scope": "Synonymous",
                 "separation_auc": 0.7,
+                "separation_p_q": 0.02,
+                "auc_vs_baseline": 0.6,
+                "p_vs_baseline_q": 0.03,
                 "average_precision": 0.35,
                 "calibrated_effect_size": 0.5,
+                "mrr_forward": 0.05,
+                "n_true": 48.0,
             },
             {
                 "model": "form_icf_posmean_psalm",
@@ -50,8 +61,13 @@ def _parallelism_by_type_df() -> pd.DataFrame:
                 "text_variant": "unknown",
                 "scope": "Synonymous",
                 "separation_auc": 0.99,
+                "separation_p_q": 0.001,
+                "auc_vs_baseline": 0.96,
+                "p_vs_baseline_q": 0.001,
                 "average_precision": 0.98,
                 "calibrated_effect_size": 5.0,
+                "mrr_forward": 0.85,
+                "n_true": 48.0,
             },
         ]
     )
@@ -65,9 +81,19 @@ def _genre_overall_df() -> pd.DataFrame:
                 "model_base": "bge_m3",
                 "text_variant": "vocalized",
                 "separation_auc": 0.6,
+                "auc_ci_low": 0.55,
+                "auc_ci_high": 0.65,
+                "separation_p_q": 0.01,
                 "average_precision": 0.3,
+                "ap_ci_low": 0.25,
+                "ap_ci_high": 0.35,
+                "gap": 0.39,
+                "gap_ci_low": 0.23,
+                "gap_ci_high": 0.5,
                 "same_genre_effect_size": 0.4,
+                "prevalence": 0.28,
                 "n_same_genre": 500,
+                "n_different_genre": 4700,
             }
         ]
     )
@@ -80,11 +106,18 @@ def _genre_by_genre_df() -> pd.DataFrame:
                 "model": "bge_m3_vocalized",
                 "genre": "Wisdom",
                 "separation_auc": 0.65,
+                "auc_ci_low": 0.6,
+                "auc_ci_high": 0.7,
                 "average_precision": 0.32,
+                "ap_ci_low": 0.27,
+                "ap_ci_high": 0.37,
                 "separation_p_perm": 0.01,
                 "separation_p_maxT": 0.05,
                 "perm_q": 0.02,
                 "maxT_q": 0.08,
+                "prevalence": 0.29,
+                "n_same_genre": 200,
+                "n_different_genre": 1900,
             }
         ]
     )
@@ -109,6 +142,9 @@ def test_build_domain_data_selects_only_the_uis_parallelism_overall_columns() ->
         "model_base",
         "text_variant",
         "separation_auc",
+        "separation_p_q",
+        "auc_vs_baseline",
+        "p_vs_baseline_q",
         "average_precision",
         "calibrated_effect_size",
         "mrr_forward",
@@ -128,6 +164,32 @@ def test_build_domain_data_keeps_scope_in_parallelism_by_type() -> None:
 
     row = data["parallelism_by_type"][0]
     assert row["scope"] == "Synonymous"
+
+
+def test_build_domain_data_selects_parallelism_by_type_columns() -> None:
+    data = build_domain_data(
+        _parallelism_overall_df(),
+        _parallelism_by_type_df(),
+        _genre_overall_df(),
+        _genre_by_genre_df(),
+        _trajectory_rows(),
+    )
+
+    row = data["parallelism_by_type"][0]
+    assert set(row) == {
+        "model",
+        "model_base",
+        "text_variant",
+        "scope",
+        "separation_auc",
+        "separation_p_q",
+        "auc_vs_baseline",
+        "p_vs_baseline_q",
+        "average_precision",
+        "calibrated_effect_size",
+        "mrr_forward",
+        "n_true",
+    }
 
 
 def test_build_domain_data_drops_psalm_level_models_from_parallelism_overall() -> None:
@@ -154,6 +216,7 @@ def test_build_domain_data_drops_psalm_level_shuffle_control_models_from_paralle
         "model_base": "morph_signature_1_2gram_psalm_shuffle03",
         "text_variant": "unknown",
         "separation_auc": 0.995,
+        "separation_p_q": 0.001,
         "average_precision": 0.99,
         "calibrated_effect_size": 5.0,
         "mrr_forward": 0.9,
@@ -193,6 +256,8 @@ def test_build_domain_data_keeps_psalm_level_models_in_genre_tables() -> None:
         "model_base": "form_icf_posmean_psalm",
         "text_variant": "unknown",
         "separation_auc": 0.7,
+        "auc_ci_low": 0.6,
+        "auc_ci_high": 0.8,
         "average_precision": 0.4,
         "same_genre_effect_size": 0.5,
         "n_same_genre": 500,
@@ -224,9 +289,14 @@ def test_build_domain_data_selects_genre_overall_columns() -> None:
         "model_base",
         "text_variant",
         "separation_auc",
+        "auc_ci_low",
+        "auc_ci_high",
         "average_precision",
-        "same_genre_effect_size",
+        "ap_ci_low",
+        "ap_ci_high",
+        "prevalence",
         "n_same_genre",
+        "n_different_genre",
     }
 
 
@@ -246,9 +316,14 @@ def test_build_domain_data_selects_genre_by_genre_columns() -> None:
         "text_variant",
         "genre",
         "separation_auc",
+        "auc_ci_low",
+        "auc_ci_high",
         "average_precision",
-        "perm_q",
-        "maxT_q",
+        "ap_ci_low",
+        "ap_ci_high",
+        "prevalence",
+        "n_same_genre",
+        "n_different_genre",
     }
 
 
@@ -334,12 +409,24 @@ def test_build_domain_data_drops_shuffle_control_models_from_every_table() -> No
         "model_base": "phrase_signature_1_2gram_shuffle03",
         "text_variant": "unknown",
         "separation_auc": 0.9,
+        "separation_p_q": 0.001,
+        "auc_vs_baseline": 0.85,
+        "p_vs_baseline_q": 0.001,
         "average_precision": 0.9,
         "calibrated_effect_size": 5.0,
         "mrr_forward": 0.9,
         "n_true": 1110.0,
+        "auc_ci_low": 0.85,
+        "auc_ci_high": 0.95,
+        "ap_ci_low": 0.85,
+        "ap_ci_high": 0.95,
+        "gap": 0.4,
+        "gap_ci_low": 0.3,
+        "gap_ci_high": 0.5,
         "same_genre_effect_size": 0.9,
+        "prevalence": 0.28,
         "n_same_genre": 500,
+        "n_different_genre": 4700,
         "scope": "Synonymous",
     }
     parallelism_overall = _parallelism_overall_df()
@@ -353,11 +440,18 @@ def test_build_domain_data_drops_shuffle_control_models_from_every_table() -> No
         "model": "phrase_signature_1_2gram_shuffle03",
         "genre": "Wisdom",
         "separation_auc": 0.9,
+        "auc_ci_low": 0.85,
+        "auc_ci_high": 0.95,
         "average_precision": 0.9,
+        "ap_ci_low": 0.85,
+        "ap_ci_high": 0.95,
         "separation_p_perm": 0.01,
         "separation_p_maxT": 0.05,
         "perm_q": 0.02,
         "maxT_q": 0.08,
+        "prevalence": 0.29,
+        "n_same_genre": 200,
+        "n_different_genre": 1900,
     }
     trajectory_rows = _trajectory_rows() + [
         {"model": "phrase_signature_1_2gram_shuffle03", "metric": "content_distance", "raw_p": 0.9}

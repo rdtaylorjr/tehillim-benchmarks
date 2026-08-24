@@ -10,6 +10,8 @@ import pandas as pd
 from library.embeddings import split_model_name
 
 _FIELDS = (
+    "n_pairs_total",
+    "n_pairs_valid",
     "raw_gap",
     "raw_p",
     "raw_effect_size",

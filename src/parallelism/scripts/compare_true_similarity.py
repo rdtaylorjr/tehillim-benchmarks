@@ -7,7 +7,7 @@ from pathlib import Path
 
 import numpy as np
 
-from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verse_nodes
+from library.bhsa import DEFAULT_CHECKOUT, list_psalms_colon_nodes
 from library.calibration import background_similarity_stats, calibrated_effect_size
 from library.embeddings import dataset_identifier, load_embeddings
 from library.incremental_cache import load_cached_rows
@@ -76,7 +76,7 @@ def main() -> None:
     marked_nodes = {n for p in pairs for n in p.source_nodes} | {
         n for p in pairs for n in p.target_nodes
     }
-    background_node_ids = [n for n in list_psalms_half_verse_nodes(api) if n not in marked_nodes]
+    background_node_ids = [n for n in list_psalms_colon_nodes(api) if n not in marked_nodes]
 
     cached_rows, cached_models = load_cached_rows(args.output) if args.output else ([], set())
     if cached_models:

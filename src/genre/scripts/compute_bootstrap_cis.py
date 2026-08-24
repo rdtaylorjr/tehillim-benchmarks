@@ -13,7 +13,7 @@ from genre.bootstrap import (
     build_similarity_and_genre_matrices,
 )
 from genre.genre_labels import load_genre_by_psalm
-from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verses_by_psalm, load_bhsa_api
+from library.bhsa import DEFAULT_CHECKOUT, list_psalms_cola_by_psalm, load_bhsa_api
 from library.calibration import background_stats_from_matrix
 from library.centroid import psalm_centroids
 from library.embeddings import dataset_identifier, load_embeddings
@@ -60,7 +60,7 @@ def main() -> None:
 
     api = load_bhsa_api(args.checkout)
     genre_by_psalm = load_genre_by_psalm(args.genre_csv)
-    half_verses_by_psalm = list_psalms_half_verses_by_psalm(api)
+    cola_by_psalm = list_psalms_cola_by_psalm(api)
 
     model_paths = sorted(p for p in args.embeddings_dir.glob("**/*.parquet") if p.is_file())
     rows, cached_models = load_cached_rows(args.output) if args.output else ([], set())
@@ -73,7 +73,7 @@ def main() -> None:
             continue
         print(f"processing {model}")
         node_vectors = load_embeddings(path)
-        psalm_vectors = psalm_centroids(half_verses_by_psalm, node_vectors)
+        psalm_vectors = psalm_centroids(cola_by_psalm, node_vectors)
         psalm_ids = sorted(psalm_vectors)
 
         similarity_matrix, genre_match_matrix = build_similarity_and_genre_matrices(
