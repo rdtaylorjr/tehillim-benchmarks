@@ -398,14 +398,34 @@ have any variance, since one already-cached run is not worth losing to a single 
 
 ## Citations
 
-The parallelism structure and genre classifications used throughout this repo (`parallel_*` BHSA
-features and the genre-classification data) are derived from Logos Bible Software's interactive
-Psalm resource, used with permission. Chicago 17th ed. format; place and publisher verified
-directly against the publisher's own product pages and corporate records:
+**Parallelism and genre data**
 
 > Witthoff, David, Kris Lyle, Matt Nerdahl, Jimmy Parks, and Elliot Ritzema. *Psalms Explorer
 > Dataset*. Edited by Eli Evans. Bellingham, WA: Logos Bible Software.
 > https://www.logos.com/product/54188/psalms-explorer-dataset.
+
+Used with permission.
+
+**Statistical methods**
+
+> Benjamini, Yoav, and Yosef Hochberg. "Controlling the False Discovery Rate: A Practical and
+> Powerful Approach to Multiple Testing." *Journal of the Royal Statistical Society, Series B*
+> 57.1 (1995): 289-300. https://doi.org/10.1111/j.2517-6161.1995.tb02031.x.
+
+> Benjamini, Yoav, and Daniel Yekutieli. "The Control of the False Discovery Rate in Multiple
+> Testing under Dependency." *Annals of Statistics* 29.4 (2001): 1165-1188.
+> https://doi.org/10.1214/aos/1013699998.
+
+> Efron, Bradley. "Better Bootstrap Confidence Intervals." *Journal of the American Statistical
+> Association* 82.397 (1987): 171-185. https://doi.org/10.1080/01621459.1987.10478410.
+
+> Freedman, David, and David Lane. "A Nonstochastic Interpretation of Reported Significance
+> Levels." *Journal of Business and Economic Statistics* 1.4 (1983): 292-298.
+> https://doi.org/10.1080/07350015.1983.10509354.
+
+> Westfall, Peter H., and S. Stanley Young. *Resampling-Based Multiple Testing: Examples and
+> Methods for p-Value Adjustment*. Wiley Series in Probability and Statistics. New York: Wiley,
+> 1993.
 
 ## License
 
