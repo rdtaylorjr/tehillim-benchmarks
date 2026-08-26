@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import math
 import re
 from pathlib import Path
 from typing import Any
@@ -131,6 +132,36 @@ def build_domain_data(
     }
 
 
+def json_safe(value: Any) -> Any:
+    """Replaces non-finite floats with None, which JSON can express and NaN cannot."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: json_safe(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [json_safe(item) for item in value]
+    return value
+
+
+def split_payloads(
+    domain: str, data: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """Splits the per-genre trajectory rows out by metric, since one view reads one metric."""
+    rows = data.get("trajectory_by_genre")
+    if rows is None:
+        return {domain: data}, {}
+
+    core = {domain: {key: value for key, value in data.items() if key != "trajectory_by_genre"}}
+    by_metric: dict[str, list[Any]] = {}
+    for row in rows:
+        by_metric.setdefault(row["metric"], []).append(row)
+    slices = {
+        metric: {domain: {"trajectory_by_genre": metric_rows}}
+        for metric, metric_rows in by_metric.items()
+    }
+    return core, slices
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("domain", help="representation domain name, e.g. semantic, lexical")
@@ -166,8 +197,15 @@ def main() -> None:
         trajectory_rows,
         trajectory_by_genre_rows,
     )
-    args.output.write_text(json.dumps({args.domain: data}))
+    core, slices = split_payloads(args.domain, data)
+    # allow_nan=False so a value JSON cannot express fails here rather than in a browser.
+    args.output.write_text(json.dumps(json_safe(core), allow_nan=False))
     print(f"wrote domain={args.domain} to {args.output}")
+
+    for metric, payload in sorted(slices.items()):
+        path = args.output.with_name(f"{args.output.stem}_trajectory_{metric}.json")
+        path.write_text(json.dumps(json_safe(payload), allow_nan=False))
+        print(f"wrote domain={args.domain} metric={metric} to {path}")
 
 
 if __name__ == "__main__":

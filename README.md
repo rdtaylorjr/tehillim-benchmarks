@@ -9,7 +9,10 @@ never as code dependencies.
 
 * **Parallelism structure**: `parallel_*` node features on BHSA `half_verse` nodes, loaded via
   Text-Fabric's `use("etcbc/bhsa", mod="rdtaylorjr/tehillim-logos/tf")`. No local checkout
-  needed, Text-Fabric fetches and caches the module itself.
+  needed, Text-Fabric fetches and caches the module itself. The underlying annotations are
+  derived from the Logos Psalms Explorer Dataset, used with permission — see Citations below.
+* **Genre classification**: a genre-classification CSV (not included in this repo, supplied at
+  runtime) is likewise derived from the Logos Psalms Explorer Dataset — see Citations below.
 * **Embedding vectors**: Parquet files from a local `tehillim-embeddings` checkout, Hive-partitioned
   at `data/domain=semantic/model=<slug>/text=<variant>/part-0.parquet`. `--checkout` on Text-Fabric
   loaders and `embeddings_dir` on the scripts below are independent inputs.
@@ -79,12 +82,12 @@ by later scholarship (staircase/climactic, emblematic), each type reported separ
 ## Genre benchmark
 
 `src/genre` scores the same embedding models against a second, independent benchmark: does an
-embedding put same-genre psalms closer together than different-genre psalms? Ground truth is a
-third-party psalm genre classification (`psalms-browser.csv`, not included in this repo, supplied
-at runtime), which labels each of the 150 psalms with exactly one of seven genres (Lament, Praise,
-Hymn, Royal, Wisdom, Thanksgiving, Trust). This is a distinct classification from Gunkel's
-form-critical genres and from the `parallel_*` structure above. The two benchmarks share only
-their embedding inputs and their statistical machinery (`src/library`).
+embedding put same-genre psalms closer together than different-genre psalms? The labels are a
+third-party psalm genre classification (not included in this repo, supplied at runtime), which
+labels each of the 150 psalms with exactly one of seven genres (Lament, Praise, Hymn, Royal,
+Wisdom, Thanksgiving, Trust); it is a distinct data source from the `parallel_*` structure above,
+though both ultimately derive from the same dataset, used with permission (see Citations below).
+The two benchmarks share their embedding inputs and their statistical machinery (`src/library`).
 
 Every one of the C(150, 2) = 11,175 psalm pairs is scored: `genre.pairs.build_genre_pairs` labels a
 pair `same_genre` when both psalms carry the same genre. Each psalm's vector is the mean of
@@ -111,7 +114,7 @@ the resampled psalms, rather than resampling the derived pairs directly.
 
 ```bash
 .venv/bin/python -m genre.scripts.compare_calibrated \
-  /path/to/psalms-browser.csv /path/to/tehillim-embeddings/data/domain=semantic --output results.csv
+  /path/to/genre-labels.csv /path/to/tehillim-embeddings/data/domain=semantic --output results.csv
 ```
 
 ### Per-genre one-vs-rest breakdown and its inference layer
@@ -151,7 +154,7 @@ genre descriptively while still failing to clear the permutation bar, or vice ve
 
 ```bash
 .venv/bin/python -m genre.scripts.compare_by_genre \
-  /path/to/psalms-browser.csv /path/to/tehillim-embeddings/data --output results.csv
+  /path/to/genre-labels.csv /path/to/tehillim-embeddings/data --output results.csv
 ```
 
 ## Lexical benchmark
@@ -183,7 +186,7 @@ Gaussian-tail interpretation the sample size cannot support.
 
 ```bash
 .venv/bin/python -m genre.scripts.shuffle_order_control \
-  /path/to/psalms-browser.csv /path/to/real_embeddings.parquet /path/to/shuffled_dir --output results.csv
+  /path/to/genre-labels.csv /path/to/real_embeddings.parquet /path/to/shuffled_dir --output results.csv
 .venv/bin/python -m parallelism.scripts.shuffle_order_control \
   /path/to/real_embeddings.parquet /path/to/shuffled_dir --output results.csv
 ```
@@ -296,7 +299,7 @@ DATA=/path/to/tehillim-data/benchmark=trajectory/domain=semantic
   /path/to/tehillim-embeddings/data/domain=semantic \
   --output-dir "$DATA/stage=profiles"
 .venv/bin/python -m trajectory.scripts.validate_against_genre \
-  /path/to/psalms-browser.csv \
+  /path/to/genre-labels.csv \
   "$DATA/stage=profiles/trajectory_distances.parquet" \
   --output "$DATA/stage=raw/validate_against_genre.csv" \
   --breakdown-output "$DATA/stage=raw/validate_against_genre_by_genre.csv"
@@ -392,6 +395,17 @@ have any variance, since one already-cached run is not worth losing to a single 
   output
 * [bhsa](https://github.com/etcbc/bhsa): the core text and linguistic annotation for the Hebrew
   Bible
+
+## Citations
+
+The parallelism structure and genre classifications used throughout this repo (`parallel_*` BHSA
+features and the genre-classification data) are derived from Logos Bible Software's interactive
+Psalm resource, used with permission. Chicago 17th ed. format; place and publisher verified
+directly against the publisher's own product pages and corporate records:
+
+> Witthoff, David, Kris Lyle, Matt Nerdahl, Jimmy Parks, and Elliot Ritzema. *Psalms Explorer
+> Dataset*. Edited by Eli Evans. Bellingham, WA: Logos Bible Software.
+> https://www.logos.com/product/54188/psalms-explorer-dataset.
 
 ## License
 
