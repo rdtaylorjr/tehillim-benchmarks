@@ -312,26 +312,42 @@ DATA=/path/to/tehillim-data/benchmark=trajectory/domain=semantic
 
 ## Results UI
 
-The actual results page lives in a separate repo,
-[tehillim-ui](https://github.com/rdtaylorjr/tehillim-ui) — a small TypeScript project with no
-dependency on this repo's Python code, only on the JSON files this repo produces. `ui_export.export`
-selects one domain's UI columns into `ui_<domain>.json`; `ui_export.scripts.build_ui_page` then
-injects a tehillim-ui build (its bundle plus `template.html`) and every domain's JSON into one
-final, self-contained `ui.html`, filling in an empty six-table placeholder for any domain (e.g.
-`phonology`, `discourse`) that has no data yet.
+The results page lives in [tehillim](https://github.com/rdtaylorjr/tehillim), which
+depends only on the JSON this repo produces, never on its Python. Two exports feed it.
+
+`ui_export.export` selects one domain's table columns, writing `ui_<domain>.json` plus one file per
+trajectory metric, since the per-genre view reads a single metric at a time. These are small and
+ship with the site, in its `public/data`.
 
 ```bash
-git clone https://github.com/rdtaylorjr/tehillim-ui /path/to/tehillim-ui
-cd /path/to/tehillim-ui && npm install && npm run build && npm run arch-lint && cd -
-.venv/bin/python -m ui_export.scripts.build_ui_page \
-  /path/to/tehillim-data/ui_semantic.json \
-  /path/to/tehillim-data/ui_lexical.json \
-  /path/to/tehillim-data/ui_morphology.json \
-  /path/to/tehillim-data/ui_syntax.json \
-  --template /path/to/tehillim-ui/template.html \
-  --bundle /path/to/tehillim-ui/dist/app.bundle.js \
-  --output ui.html
+DATA=/path/to/tehillim-data
+SITE=/path/to/tehillim
+.venv/bin/python -m ui_export.export syntax \
+  --parallelism-dir "$DATA/benchmark=parallelism/domain=syntax" \
+  --genre-dir "$DATA/benchmark=genre/domain=syntax" \
+  --trajectory-ui-rows "$DATA/benchmark=trajectory/domain=syntax/stage=ui/ui_rows.json" \
+  --trajectory-by-genre-rows "$DATA/benchmark=trajectory/domain=syntax/stage=ui/ui_rows_by_genre.json" \
+  --output "$SITE/public/data/ui_syntax.json"
 ```
+
+`ui_export.scripts.build_detail_json` writes the per-model charts a table row opens: one file per
+model per section, because the detail view renders exactly the section the toolbar selected. These
+are large and are served from object storage rather than shipped with the site, so `--output-dir`
+points at a directory the site does not build from.
+
+```bash
+.venv/bin/python -m ui_export.scripts.build_detail_json \
+  /path/to/psalms-browser.csv \
+  --data-dir "$DATA" \
+  --ui-dir "$SITE/public/data" \
+  --domains semantic lexical morphology syntax \
+  --output-dir "$SITE/detail-data" \
+  --workers 4
+```
+
+`--ui-dir` is separate from `--data-dir` because the table payloads live with the site while the
+benchmark Parquet stays here. A model whose trajectory metrics are all NaN gets no trajectory
+section, and the page says so rather than rendering an empty chart.
 
 ## Usage
 
@@ -389,8 +405,8 @@ have any variance, since one already-cached run is not worth losing to a single 
 
 * [tehillim-embeddings](https://github.com/rdtaylorjr/tehillim-embeddings): the embedding vectors
   scored here
-* [tehillim-ui](https://github.com/rdtaylorjr/tehillim-ui): the results page that renders this
-  repo's `ui_<domain>.json` output
+* [tehillim](https://github.com/rdtaylorjr/tehillim): the results page that renders this
+  repo's `ui_<domain>.json` and per-model detail output
 * [tehillim-data](https://github.com/rdtaylorjr/tehillim-data): hosts this repo's Parquet/CSV/JSON
   output
 * [bhsa](https://github.com/etcbc/bhsa): the core text and linguistic annotation for the Hebrew

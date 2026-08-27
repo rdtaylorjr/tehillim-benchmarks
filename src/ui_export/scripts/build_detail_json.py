@@ -76,6 +76,23 @@ def residualize_trajectory_metric(
     return df
 
 
+SECTIONS = ("parallelism", "genre", "trajectory")
+
+
+def split_sections(payload: dict[str, Any], output_dir: Path) -> list[Path]:
+    """Writes one file per section, since the detail view renders exactly one of them at a time."""
+    written: list[Path] = []
+    for section in SECTIONS:
+        if section not in payload:
+            continue
+        body = {"model": payload["model"], "domain": payload["domain"], section: payload[section]}
+        output_dir.mkdir(parents=True, exist_ok=True)
+        path = output_dir / f"detail_{payload['domain']}_{payload['model']}_{section}.json"
+        path.write_text(json.dumps(body, allow_nan=False))
+        written.append(path)
+    return written
+
+
 def build_one_model(
     model: str,
     domain: str,
@@ -112,8 +129,7 @@ def build_one_model(
         )
     if len(payload) <= 2:
         return
-    output_dir.mkdir(parents=True, exist_ok=True)
-    (output_dir / f"detail_{domain}_{model}.json").write_text(json.dumps(payload, allow_nan=False))
+    split_sections(payload, output_dir)
 
 
 def build_domain(
@@ -230,6 +246,12 @@ def main() -> None:
     )
     parser.add_argument("--data-dir", type=Path, required=True, help="tehillim-data checkout root")
     parser.add_argument(
+        "--ui-dir",
+        type=Path,
+        required=True,
+        help="directory holding ui_<domain>.json, which the site carries, not the data repo",
+    )
+    parser.add_argument(
         "--domains", nargs="+", default=["lexical", "morphology", "semantic", "syntax"]
     )
     parser.add_argument("--output-dir", type=Path, required=True)
@@ -242,7 +264,7 @@ def main() -> None:
     n_cola = {psalm: len(nodes) for psalm, nodes in list_psalms_cola_by_psalm(api).items()}
 
     for domain in args.domains:
-        domain_json_path = args.data_dir / f"ui_{domain}.json"
+        domain_json_path = args.ui_dir / f"ui_{domain}.json"
         domain_json = json.loads(domain_json_path.read_text())[domain]
         written = build_domain(
             domain,

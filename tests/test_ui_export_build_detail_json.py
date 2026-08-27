@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import pandas as pd
 
@@ -5,6 +7,7 @@ from ui_export.scripts.build_detail_json import (
     attach_genre_columns,
     choose_primary_metric,
     residualize_trajectory_metric,
+    split_sections,
     table_model_sets,
     target_models,
 )
@@ -133,3 +136,44 @@ def test_residualize_trajectory_metric_drops_rows_missing_the_metric_or_content_
     assert len(out) == 1
     assert np.isfinite(out["length_controlled"]).all()
     assert np.isfinite(out["length_and_content_controlled"]).all()
+
+
+def test_split_sections_writes_one_file_per_section(tmp_path) -> None:
+    payload = {
+        "model": "berel",
+        "domain": "semantic",
+        "parallelism": {"series": [1]},
+        "genre": {"heatmap": [2]},
+    }
+    written = split_sections(payload, tmp_path)
+    assert sorted(p.name for p in written) == [
+        "detail_semantic_berel_genre.json",
+        "detail_semantic_berel_parallelism.json",
+    ]
+
+
+def test_split_sections_keeps_each_file_self_describing(tmp_path) -> None:
+    payload = {"model": "berel", "domain": "semantic", "genre": {"heatmap": [2]}}
+    written = split_sections(payload, tmp_path)
+    body = json.loads(written[0].read_text())
+    assert body["model"] == "berel"
+    assert body["domain"] == "semantic"
+    assert body["genre"] == {"heatmap": [2]}
+
+
+def test_split_sections_carries_no_section_the_file_is_not_for(tmp_path) -> None:
+    payload = {
+        "model": "berel",
+        "domain": "semantic",
+        "parallelism": {"series": [1]},
+        "genre": {"heatmap": [2]},
+    }
+    written = split_sections(payload, tmp_path)
+    par = json.loads((tmp_path / "detail_semantic_berel_parallelism.json").read_text())
+    assert "genre" not in par
+    assert len(written) == 2
+
+
+def test_split_sections_writes_nothing_when_no_section_has_data(tmp_path) -> None:
+    assert split_sections({"model": "m", "domain": "semantic"}, tmp_path) == []
+    assert list(tmp_path.iterdir()) == []
