@@ -9,7 +9,7 @@ import numpy as np
 
 from library.bhsa import DEFAULT_CHECKOUT
 from library.embeddings import load_embeddings
-from library.order_shuffle import order_shuffle_result
+from library.order_shuffle import DEFAULT_N_SHUFFLES, order_shuffle_result
 from library.retrieval_metrics import cosine_similarity_matrix
 from parallelism.evaluate import build_side_vectors
 from parallelism.pairs import RetrievalPair, build_retrieval_pairs, filter_pairs_with_vectors
@@ -32,6 +32,7 @@ def main() -> None:
     parser.add_argument("real_embeddings", type=Path)
     parser.add_argument("shuffled_embeddings_dir", type=Path)
     parser.add_argument("--checkout", default=DEFAULT_CHECKOUT, help="BHSA/module checkout spec")
+    parser.add_argument("--n-shuffles", type=int, default=DEFAULT_N_SHUFFLES)
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
 
@@ -41,7 +42,7 @@ def main() -> None:
     all_pairs = build_retrieval_pairs(groups)
 
     auc_real = score_separation_auc(args.real_embeddings, all_pairs)
-    shuffled_paths = sorted(args.shuffled_embeddings_dir.glob("**/*.parquet"))
+    shuffled_paths = sorted(args.shuffled_embeddings_dir.glob("**/*.parquet"))[: args.n_shuffles]
     auc_shuffled = []
     for path in shuffled_paths:
         print(f"scoring {path.parent.name}", file=sys.stderr)

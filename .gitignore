@@ -21,3 +21,7 @@ results/
 .coverage
 htmlcov/
 *claude*
+
+# Extracted full text from copyrighted PDFs. NEVER commit: this repo is public.
+# Regenerable from Zotero with tools/extraction/extract.py
+corpus-cache/

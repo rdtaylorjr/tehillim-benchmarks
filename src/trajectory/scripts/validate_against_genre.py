@@ -28,15 +28,16 @@ def observed_gap(distances: np.ndarray, same_genre: np.ndarray) -> float:
     return float(distances[~same_genre].mean() - distances[same_genre].mean())
 
 
+# Psalms are the exchangeable unit and residuals live on pairs, so the permutation acts on labels.
 def residualize_on_covariates(response: np.ndarray, covariates: np.ndarray) -> np.ndarray:
-    """OLS-residualizes response on one or more covariate columns, jointly (Freedman-Lane 1983)."""
+    """OLS-residualizes response on one or more covariate columns, jointly (Kennedy 1995)."""
     design = np.column_stack([np.ones(len(response)), covariates])
     coefficients, *_ = np.linalg.lstsq(design, response, rcond=None)
     return np.asarray(response - design @ coefficients)
 
 
 def residualize_by_length(distances: np.ndarray, length_diff: np.ndarray) -> np.ndarray:
-    """OLS-residualizes distances on |length difference|, a Freedman-Lane (1983) nuisance fix."""
+    """OLS-residualizes distances on |length difference|, a Kennedy (1995) nuisance fix."""
     return residualize_on_covariates(distances, length_diff.reshape(-1, 1))
 
 
@@ -62,7 +63,7 @@ def same_genre_matrix(
     """Whether each shuffled pair shares a genre; identical for every source of one metric."""
     _, codes = np.unique(genre_labels, return_inverse=True)
     shuffled_codes = rng.permuted(np.tile(codes, (n_permutations, 1)), axis=1)
-    return shuffled_codes[:, idx_a] == shuffled_codes[:, idx_b]
+    return np.asarray(shuffled_codes[:, idx_a] == shuffled_codes[:, idx_b])
 
 
 def permutation_test(

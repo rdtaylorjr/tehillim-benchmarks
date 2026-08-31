@@ -184,6 +184,13 @@ real embeddings, score N within-psalm-order-shuffled embeddings
 This replaced an earlier ad hoc z-score computed from a 30-draw empirical mean/std, which implied a
 Gaussian-tail interpretation the sample size cannot support.
 
+N is the `--n-shuffles` argument, defaulting to `library.order_shuffle.DEFAULT_N_SHUFFLES` = 1000.
+The floor `1 / (N + 1)` bounds every p-value the control can produce, so a small N caps the
+smallest reachable BH q-value as well. `library.order_shuffle.minimum_shuffles_for_fdr` returns the
+fewest shuffles whose floor still satisfies `1 / (N + 1) <= alpha / m` for m hypotheses, 19 for a
+single hypothesis and 139 for the 7 genres at alpha = 0.05, and `order_shuffle_result` warns when
+the supplied shuffle count falls under it.
+
 ```bash
 .venv/bin/python -m genre.scripts.shuffle_order_control \
   /path/to/genre-labels.csv /path/to/real_embeddings.parquet /path/to/shuffled_dir --output results.csv
@@ -191,12 +198,17 @@ Gaussian-tail interpretation the sample size cannot support.
   /path/to/real_embeddings.parquet /path/to/shuffled_dir --output results.csv
 ```
 
-Run against `icf_posmean_psalm` (genre) and `icf_pos4` (parallelism): genre's Hymn and Lament
-deltas are individually significant (p=0.0323 each, the resolution ceiling at 30 shuffles) but do
-not survive BH/BY-FDR correction across the 7 genres (q=0.1129 BH, 0.2927 BY). Parallelism's
-`icf_pos4` shows a significant order effect (`delta_order=+0.1768, p=0.0323`), though the shuffle
-design alone cannot distinguish a genuine colon-order signal from a bin-adjacency artifact of
-the positional binning itself, an open question left unresolved by this control.
+Run against `icf_posmean_psalm` (genre) and `icf_pos4` (parallelism), both at 30 shuffles. The
+genre run is resolution-limited. Thirty shuffles put the p-value floor at 1/31 = 0.0323, Hymn and
+Lament both land on that floor (p=0.0323 each), and two hypotheses tied at the floor out of 7 fix
+their BH q at (7/2) x 0.0323 = 0.1129 and their BY q at 0.2927 with no room to move. The reported
+failure to survive FDR correction is therefore a property of the shuffle count, and the run carries
+no evidence either way about colon order in genre signal. Clearing q < 0.05 across 7 hypotheses
+takes at least the 139 shuffles `minimum_shuffles_for_fdr(7)` asks for. Parallelism's `icf_pos4`
+tests a single hypothesis, where 30 shuffles clear the threshold, and shows an order effect
+(`delta_order=+0.1768, p=0.0323`), though the shuffle design alone cannot distinguish a genuine
+colon-order signal from a bin-adjacency artifact of the positional binning itself, an open
+question left unresolved by this control.
 
 ### BHSA checkout pin
 
@@ -268,10 +280,10 @@ signal, deliberately apart from the AP/AUC machinery above: a permutation test o
 psalm pairs sit closer together than different-genre pairs, on all five distance metrics. Because
 genre labels correlate with psalm length in this corpus (Hymns are short, Wisdom psalms are
 long and highly variable), raw distance comparisons are confounded with length. `residualize_by_length`
-removes that confound via a Freedman-Lane (1983) nuisance-covariate control (fit distance on
-`|length difference|`, permute genre labels against the fixed residual), which for a linear
-group-mean-difference statistic is mathematically equivalent to Freedman and Lane's residual-permute
-procedure. Three sources are reported side by side per metric: `raw`, `length_controlled`, and
+removes that confound via Kennedy's (1995) nuisance-covariate control: fit distance on
+`|length difference|`, then permute genre labels against the fixed residual. The exchangeable unit
+is the psalm while the residuals live on psalm pairs, which is why residual permutation is not
+used. Three sources are reported side by side per metric: `raw`, `length_controlled`, and
 (for every metric except `content_distance` itself) `length_and_content_controlled`, which
 additionally residualizes on `content_distance` as a second covariate, isolating a structural
 metric's signal from topic.
@@ -435,9 +447,8 @@ Used with permission.
 > Efron, Bradley. "Better Bootstrap Confidence Intervals." *Journal of the American Statistical
 > Association* 82.397 (1987): 171-185. https://doi.org/10.1080/01621459.1987.10478410.
 
-> Freedman, David, and David Lane. "A Nonstochastic Interpretation of Reported Significance
-> Levels." *Journal of Business and Economic Statistics* 1.4 (1983): 292-298.
-> https://doi.org/10.1080/07350015.1983.10509354.
+> Kennedy, Peter E. "Randomization Tests in Econometrics." *Journal of Business and Economic
+> Statistics* 13.1 (1995): 85-94. https://doi.org/10.1080/07350015.1995.10524581.
 
 > Westfall, Peter H., and S. Stanley Young. *Resampling-Based Multiple Testing: Examples and
 > Methods for p-Value Adjustment*. Wiley Series in Probability and Statistics. New York: Wiley,

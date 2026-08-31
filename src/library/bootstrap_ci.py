@@ -1,7 +1,12 @@
 """Efron (1987) BCa confidence interval from a bootstrap distribution plus a jackknife."""
 
+import warnings
+
 import numpy as np
 from scipy.stats import norm
+
+# Acceleration is a jackknife skewness estimate, undefined below two values, where BCa decays to BC.
+MIN_JACKKNIFE_FOR_ACCELERATION = 2
 
 
 def bca_ci(
@@ -17,7 +22,13 @@ def bca_ci(
     z0 = norm.ppf(prop_less)
 
     valid_jack = jackknife_values[~np.isnan(jackknife_values)]
-    if len(valid_jack) < 2:
+    if len(valid_jack) < MIN_JACKKNIFE_FOR_ACCELERATION:
+        warnings.warn(
+            f"BCa acceleration needs at least {MIN_JACKKNIFE_FOR_ACCELERATION} valid jackknife "
+            f"values and got {len(valid_jack)}, so the returned interval is bias-corrected only.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
         a = 0.0
     else:
         jack_mean = valid_jack.mean()
