@@ -19,6 +19,7 @@ __pycache__/
 .idea/
 results/
 .coverage
+coverage.json
 htmlcov/
 *claude*
 
