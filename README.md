@@ -198,17 +198,21 @@ the supplied shuffle count falls under it.
   /path/to/real_embeddings.parquet /path/to/shuffled_dir --output results.csv
 ```
 
-Run against `icf_posmean_psalm` (genre) and `icf_pos4` (parallelism), both at 30 shuffles. The
-genre run is resolution-limited. Thirty shuffles put the p-value floor at 1/31 = 0.0323, Hymn and
-Lament both land on that floor (p=0.0323 each), and two hypotheses tied at the floor out of 7 fix
-their BH q at (7/2) x 0.0323 = 0.1129 and their BY q at 0.2927 with no room to move. The reported
-failure to survive FDR correction is therefore a property of the shuffle count, and the run carries
-no evidence either way about colon order in genre signal. Clearing q < 0.05 across 7 hypotheses
-takes at least the 139 shuffles `minimum_shuffles_for_fdr(7)` asks for. Parallelism's `icf_pos4`
-tests a single hypothesis, where 30 shuffles clear the threshold, and shows an order effect
-(`delta_order=+0.1768, p=0.0323`), though the shuffle design alone cannot distinguish a genuine
-colon-order signal from a bin-adjacency artifact of the positional binning itself, an open
-question left unresolved by this control.
+Run against `icf_posmean_psalm` (genre) and `icf_pos4` (parallelism), both at 1000 shuffles.
+Genre shows an order effect in Hymn (`delta_order=+0.2584`) and Lament (`delta_order=+0.0319`),
+each at the p-value floor of 1/1001 = 0.000999, which clears FDR correction across the 7 genres
+under BH (q=0.0035) and under BY (q=0.0091). The remaining five genres show no effect, with
+`delta_order` between -0.0072 and +0.0012. Parallelism's `icf_pos4` tests a single hypothesis and
+shows an order effect (`delta_order=+0.1767, p=0.000999`), though the shuffle design alone cannot
+distinguish a genuine colon-order signal from a bin-adjacency artifact of the positional binning
+itself, an open question left unresolved by this control.
+
+An earlier run of this control used 30 shuffles, which put the p-value floor at 1/31 = 0.0323. Hymn
+and Lament landed on that floor, and two hypotheses tied there out of 7 fixed their BH q at
+(7/2) x 0.0323 = 0.1129 and their BY q at 0.2927, so the genre result could not have cleared
+q < 0.05 at any effect size. That run is archived in `tehillim-data` under
+`archive=shuffle_control_n30/`. Its failure to survive correction was a property of the shuffle
+count, and the 1000-shuffle run replaces it.
 
 ### BHSA checkout pin
 
