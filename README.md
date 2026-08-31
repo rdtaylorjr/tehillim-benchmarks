@@ -280,10 +280,13 @@ signal, deliberately apart from the AP/AUC machinery above: a permutation test o
 psalm pairs sit closer together than different-genre pairs, on all five distance metrics. Because
 genre labels correlate with psalm length in this corpus (Hymns are short, Wisdom psalms are
 long and highly variable), raw distance comparisons are confounded with length. `residualize_by_length`
-removes that confound via Kennedy's (1995) nuisance-covariate control: fit distance on
-`|length difference|`, then permute genre labels against the fixed residual. The exchangeable unit
-is the psalm while the residuals live on psalm pairs, which is why residual permutation is not
-used. Three sources are reported side by side per metric: `raw`, `length_controlled`, and
+removes that confound via the Still-White (1981) nuisance-covariate control: fit distance on
+`|length difference|`, then permute genre labels against the fixed residual. Gail, Tan, and
+Piantadosi (1988) give the general covariate form, and Winkler et al. (2014) catalogue it as
+Still-White to separate it from Freedman-Lane (1983), which permutes the reduced-model residuals,
+and from Kennedy (1995), which residualizes the genre labels on the covariate as well. Neither of
+those applies here. The exchangeable unit is the psalm while the residuals live on psalm pairs, so
+the labels are the only thing that can be permuted. Three sources are reported side by side per metric: `raw`, `length_controlled`, and
 (for every metric except `content_distance` itself) `length_and_content_controlled`, which
 additionally residualizes on `content_distance` as a second covariate, isolating a structural
 metric's signal from topic.
@@ -447,12 +450,24 @@ Used with permission.
 > Efron, Bradley. "Better Bootstrap Confidence Intervals." *Journal of the American Statistical
 > Association* 82.397 (1987): 171-185. https://doi.org/10.1080/01621459.1987.10478410.
 
+> Gail, Mitchell H., Wai Y. Tan, and Steven Piantadosi. "Tests for No Treatment Effect in
+> Randomized Clinical Trials." *Biometrika* 75.1 (1988): 57-64.
+> https://doi.org/10.1093/biomet/75.1.57.
+
 > Kennedy, Peter E. "Randomization Tests in Econometrics." *Journal of Business and Economic
 > Statistics* 13.1 (1995): 85-94. https://doi.org/10.1080/07350015.1995.10524581.
+
+> Still, Arthur W., and Anthony P. White. "The Approximate Randomization Test as an Alternative to
+> the F Test in Analysis of Variance." *British Journal of Mathematical and Statistical Psychology*
+> 34.2 (1981): 243-252. https://doi.org/10.1111/j.2044-8317.1981.tb00634.x.
 
 > Westfall, Peter H., and S. Stanley Young. *Resampling-Based Multiple Testing: Examples and
 > Methods for p-Value Adjustment*. Wiley Series in Probability and Statistics. New York: Wiley,
 > 1993.
+
+> Winkler, Anderson M., Gerard R. Ridgway, Matthew A. Webster, Stephen M. Smith, and Thomas E.
+> Nichols. "Permutation Inference for the General Linear Model." *NeuroImage* 92 (2014): 381-397.
+> https://doi.org/10.1016/j.neuroimage.2014.01.060.
 
 ## License
 
