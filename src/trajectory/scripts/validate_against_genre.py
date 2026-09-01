@@ -1,7 +1,9 @@
 """Permutation test of within vs between-genre psalm distance, apart from the AP/AUC benchmark."""
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -26,15 +28,16 @@ def observed_gap(distances: np.ndarray, same_genre: np.ndarray) -> float:
     return float(distances[~same_genre].mean() - distances[same_genre].mean())
 
 
+# Psalms are the exchangeable unit and residuals live on pairs, so the permutation acts on labels.
 def residualize_on_covariates(response: np.ndarray, covariates: np.ndarray) -> np.ndarray:
-    """OLS-residualizes response on one or more covariate columns, jointly (Freedman-Lane 1983)."""
+    """OLS-residualizes response on one or more covariate columns, jointly (Still-White 1981)."""
     design = np.column_stack([np.ones(len(response)), covariates])
     coefficients, *_ = np.linalg.lstsq(design, response, rcond=None)
     return np.asarray(response - design @ coefficients)
 
 
 def residualize_by_length(distances: np.ndarray, length_diff: np.ndarray) -> np.ndarray:
-    """OLS-residualizes distances on |length difference|, a Freedman-Lane (1983) nuisance fix."""
+    """OLS-residualizes distances on |length difference|, a Still-White (1981) nuisance fix."""
     return residualize_on_covariates(distances, length_diff.reshape(-1, 1))
 
 
@@ -50,6 +53,19 @@ def _null_gaps(same_matrix: np.ndarray, distances: np.ndarray) -> np.ndarray:
     return np.asarray((diff_sum / diff_count) - (same_sum / same_count))
 
 
+def same_genre_matrix(
+    idx_a: np.ndarray,
+    idx_b: np.ndarray,
+    genre_labels: np.ndarray,
+    n_permutations: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Whether each shuffled pair shares a genre; identical for every source of one metric."""
+    _, codes = np.unique(genre_labels, return_inverse=True)
+    shuffled_codes = rng.permuted(np.tile(codes, (n_permutations, 1)), axis=1)
+    return np.asarray(shuffled_codes[:, idx_a] == shuffled_codes[:, idx_b])
+
+
 def permutation_test(
     idx_a: np.ndarray,
     idx_b: np.ndarray,
@@ -57,16 +73,15 @@ def permutation_test(
     genre_labels: np.ndarray,
     n_permutations: int = 10000,
     rng: np.random.Generator | None = None,
+    same_matrix: np.ndarray | None = None,
 ) -> tuple[float, float, float]:
     """Observed gap, p-value, and a null-calibrated effect size (NaN if null has no variance)."""
     rng = rng if rng is not None else np.random.default_rng()
     same_genre = genre_labels[idx_a] == genre_labels[idx_b]
     observed = observed_gap(distances, same_genre)
 
-    _, codes = np.unique(genre_labels, return_inverse=True)
-    tiled_codes = np.tile(codes, (n_permutations, 1))
-    shuffled_codes = rng.permuted(tiled_codes, axis=1)
-    same_matrix = shuffled_codes[:, idx_a] == shuffled_codes[:, idx_b]
+    if same_matrix is None:
+        same_matrix = same_genre_matrix(idx_a, idx_b, genre_labels, n_permutations, rng)
     null_gaps = _null_gaps(same_matrix, distances)
 
     p_value = (np.sum(null_gaps >= observed) + 1) / (n_permutations + 1)
@@ -141,6 +156,10 @@ def build_validation_row(
         return row
 
     values_by_source = _values_by_source(metric, subset, length_diff)
+    # The shuffle depends only on the pairs and the seed, so all three sources share one matrix.
+    shared_matrix = same_genre_matrix(
+        idx_a, idx_b, genre_labels, n_permutations, np.random.default_rng(seed)
+    )
 
     for source in _SOURCES:
         values = values_by_source[source]
@@ -156,6 +175,7 @@ def build_validation_row(
             genre_labels,
             n_permutations=n_permutations,
             rng=np.random.default_rng(seed),
+            same_matrix=shared_matrix,
         )
         row[f"{source}_gap"] = gap
         row[f"{source}_p"] = p_value
@@ -267,6 +287,70 @@ def add_genre_breakdown_fdr_columns(rows: list[dict[str, str | int | float]]) ->
     return df
 
 
+def breakdown_path_for(output: Path) -> Path:
+    """The per-genre breakdown sits beside its validation CSV, since the two are always one run."""
+    return output.with_name(f"{output.stem}_by_genre{output.suffix}")
+
+
+def validate_one_model(
+    model: str,
+    group: pd.DataFrame,
+    genre_by_psalm: dict[int, str],
+    n_cola: dict[int, int],
+    n_permutations: int,
+    seed: int,
+) -> tuple[list[dict[str, Any]], list[dict[str, str | int | float]]]:
+    """Every validation and breakdown row for one model, independent of every other model."""
+    psalms = sorted(set(group["psalm_a"]) | set(group["psalm_b"]))
+    usable_psalms = [p for p in psalms if p in genre_by_psalm]
+    index_of = {psalm: i for i, psalm in enumerate(usable_psalms)}
+    mask = group["psalm_a"].isin(usable_psalms) & group["psalm_b"].isin(usable_psalms)
+    base_subset = group[mask]
+    genre_labels = np.array([genre_by_psalm[psalm] for psalm in usable_psalms])
+
+    rows: list[dict[str, Any]] = []
+    breakdown_rows: list[dict[str, str | int | float]] = []
+    for metric in _METRICS:
+        rows.append(
+            build_validation_row(
+                model, metric, base_subset, index_of, genre_labels, n_cola, n_permutations, seed
+            )
+        )
+        breakdown_rows.extend(
+            build_genre_breakdown_rows(
+                model, metric, base_subset, index_of, genre_labels, n_cola, n_permutations, seed
+            )
+        )
+    return rows, breakdown_rows
+
+
+def validate_models(
+    distances_df: pd.DataFrame,
+    genre_by_psalm: dict[int, str],
+    n_cola: dict[int, int],
+    n_permutations: int,
+    seed: int,
+    max_workers: int = 4,
+) -> tuple[list[dict[str, Any]], list[dict[str, str | int | float]]]:
+    """Models are independent, so they run across workers and are reassembled in submit order."""
+    groups = [(model, group) for model, group in distances_df.groupby("model")]
+    rows: list[dict[str, Any]] = []
+    breakdown: list[dict[str, str | int | float]] = []
+    with ProcessPoolExecutor(max_workers=max_workers) as pool:
+        futures = [
+            pool.submit(
+                validate_one_model, model, group, genre_by_psalm, n_cola, n_permutations, seed
+            )
+            for model, group in groups
+        ]
+        # Results are collected in submission order, so the output never depends on worker timing.
+        for future in futures:
+            model_rows, model_breakdown = future.result()
+            rows.extend(model_rows)
+            breakdown.extend(model_breakdown)
+    return rows, breakdown
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -278,7 +362,9 @@ def main() -> None:
     parser.add_argument("--checkout", default=DEFAULT_CHECKOUT, help="BHSA checkout spec")
     parser.add_argument("--n-permutations", type=int, default=10000)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--workers", type=int, default=4)
     parser.add_argument("--output", type=Path, default=None)
+    # The breakdown is computed either way, so it is written beside --output by default.
     parser.add_argument("--breakdown-output", type=Path, default=None)
     args = parser.parse_args()
 
@@ -287,43 +373,9 @@ def main() -> None:
     genre_by_psalm = load_genre_by_psalm(args.genre_csv)
     distances_df = pd.read_parquet(args.distances_parquet)
 
-    rows = []
-    all_breakdown_rows: list[dict[str, str | int | float]] = []
-    for model, group in distances_df.groupby("model"):
-        psalms = sorted(set(group["psalm_a"]) | set(group["psalm_b"]))
-        usable_psalms = [p for p in psalms if p in genre_by_psalm]
-        index_of = {psalm: i for i, psalm in enumerate(usable_psalms)}
-        mask = group["psalm_a"].isin(usable_psalms) & group["psalm_b"].isin(usable_psalms)
-        base_subset = group[mask]
-        genre_labels = np.array([genre_by_psalm[psalm] for psalm in usable_psalms])
-
-        breakdown_rows = []
-        for metric in _METRICS:
-            rows.append(
-                build_validation_row(
-                    model,
-                    metric,
-                    base_subset,
-                    index_of,
-                    genre_labels,
-                    n_cola,
-                    args.n_permutations,
-                    args.seed,
-                )
-            )
-            breakdown_rows.extend(
-                build_genre_breakdown_rows(
-                    model,
-                    metric,
-                    base_subset,
-                    index_of,
-                    genre_labels,
-                    n_cola,
-                    args.n_permutations,
-                    args.seed,
-                )
-            )
-        all_breakdown_rows.extend(breakdown_rows)
+    rows, all_breakdown_rows = validate_models(
+        distances_df, genre_by_psalm, n_cola, args.n_permutations, args.seed, args.workers
+    )
 
     result_df = add_fdr_columns(rows)
 
@@ -341,9 +393,13 @@ def main() -> None:
     if args.output:
         result_df.to_csv(args.output, index=False)
 
-    if args.breakdown_output and all_breakdown_rows:
-        breakdown_df = add_genre_breakdown_fdr_columns(all_breakdown_rows)
-        breakdown_df.to_csv(args.breakdown_output, index=False)
+    if all_breakdown_rows:
+        breakdown_output = args.breakdown_output or (
+            breakdown_path_for(args.output) if args.output else None
+        )
+        if breakdown_output:
+            breakdown_df = add_genre_breakdown_fdr_columns(all_breakdown_rows)
+            breakdown_df.to_csv(breakdown_output, index=False)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ from genre.pairs import GenrePair, build_genre_pairs, filter_pairs_by_genre
 from library.bhsa import DEFAULT_CHECKOUT, list_psalms_cola_by_psalm, load_bhsa_api
 from library.centroid import psalm_centroids
 from library.embeddings import load_embeddings
-from library.order_shuffle import order_shuffle_result
+from library.order_shuffle import DEFAULT_N_SHUFFLES, order_shuffle_result
 
 
 def score_genre_ap(
@@ -43,6 +43,7 @@ def main() -> None:
     parser.add_argument("real_embeddings", type=Path)
     parser.add_argument("shuffled_embeddings_dir", type=Path)
     parser.add_argument("--checkout", default=DEFAULT_CHECKOUT, help="BHSA checkout spec")
+    parser.add_argument("--n-shuffles", type=int, default=DEFAULT_N_SHUFFLES)
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
 
@@ -53,7 +54,7 @@ def main() -> None:
     genres = sorted(set(genre_by_psalm.values()))
 
     real_ap = score_genre_ap(args.real_embeddings, cola_by_psalm, pairs, genres)
-    shuffled_paths = sorted(args.shuffled_embeddings_dir.glob("**/*.parquet"))
+    shuffled_paths = sorted(args.shuffled_embeddings_dir.glob("**/*.parquet"))[: args.n_shuffles]
     shuffled_ap: dict[str, list[float]] = {genre: [] for genre in genres}
     for path in shuffled_paths:
         print(f"scoring {path.parent.name}", file=sys.stderr)
@@ -64,7 +65,9 @@ def main() -> None:
     rows = []
     for genre in genres:
         result = order_shuffle_result(
-            real_score=real_ap[genre], shuffled_scores=np.array(shuffled_ap[genre])
+            real_score=real_ap[genre],
+            shuffled_scores=np.array(shuffled_ap[genre]),
+            n_hypotheses=len(genres),
         )
         rows.append(
             {

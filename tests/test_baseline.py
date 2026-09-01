@@ -11,7 +11,7 @@ def test_build_unmarked_bicola_pairs_adjacent_unmarked_nodes() -> None:
 
 def test_build_unmarked_bicola_excludes_a_pair_touching_a_marked_node() -> None:
     """A pair is dropped if EITHER side was ever a source or target of a true parallel pair,
-    keeping the negative-control set cleanly disjoint from the real ground truth.
+    keeping the negative-control set cleanly disjoint from the marked pairs.
     """
     cola_by_psalm = {1: [10, 11, 12, 13]}
 

@@ -1,5 +1,8 @@
+import json
+
 import pandas as pd
 
+from ui_export import export
 from ui_export.export import build_domain_data
 
 
@@ -483,3 +486,56 @@ def test_build_domain_data_drops_shuffle_control_models_from_every_table() -> No
     ):
         models = {row["model"] for row in data[table]}
         assert "phrase_signature_1_2gram_shuffle03" not in models, table
+
+
+def test_json_safe_replaces_non_finite_floats_with_none() -> None:
+    """NaN and infinities are legal Python but not legal JSON, so they become null."""
+    payload = {"gap": float("nan"), "hi": float("inf"), "lo": float("-inf"), "ok": 0.5}
+    assert export.json_safe(payload) == {"gap": None, "hi": None, "lo": None, "ok": 0.5}
+
+
+def test_json_safe_walks_nested_lists_and_dicts() -> None:
+    payload = {"rows": [{"p": float("nan")}, {"p": 0.25}]}
+    assert export.json_safe(payload) == {"rows": [{"p": None}, {"p": 0.25}]}
+
+
+def test_json_safe_leaves_other_values_untouched() -> None:
+    payload = {"model": "alephbert", "n": 1110, "flag": True, "missing": None}
+    assert export.json_safe(payload) == payload
+
+
+def test_exported_payload_is_strict_json() -> None:
+    """allow_nan=False is the guard: a stray non-finite value fails the export loudly."""
+    payload = export.json_safe({"a": float("nan")})
+    assert json.dumps(payload, allow_nan=False) == '{"a": null}'
+
+
+def test_split_payloads_separates_the_per_genre_trajectory_rows() -> None:
+    """The by-genre section is 79% of the payload and is read by one view, so it ships apart."""
+    data = {
+        "genre_overall": [{"model": "a"}],
+        "trajectory_by_genre": [
+            {"model": "a", "metric": "structural_distance", "genre": "Hymn"},
+            {"model": "a", "metric": "turning_angle_distance", "genre": "Hymn"},
+        ],
+    }
+    core, slices = export.split_payloads("semantic", data)
+
+    assert "trajectory_by_genre" not in core["semantic"]
+    assert core["semantic"]["genre_overall"] == [{"model": "a"}]
+    assert set(slices) == {"structural_distance", "turning_angle_distance"}
+    assert slices["structural_distance"]["semantic"]["trajectory_by_genre"] == [
+        {"model": "a", "metric": "structural_distance", "genre": "Hymn"}
+    ]
+
+
+def test_split_payloads_yields_no_slices_when_there_are_no_by_genre_rows() -> None:
+    core, slices = export.split_payloads("syntax", {"genre_overall": [], "trajectory_by_genre": []})
+    assert slices == {}
+    assert core["syntax"]["genre_overall"] == []
+
+
+def test_split_payloads_leaves_a_payload_without_the_section_alone() -> None:
+    core, slices = export.split_payloads("syntax", {"genre_overall": []})
+    assert core == {"syntax": {"genre_overall": []}}
+    assert slices == {}

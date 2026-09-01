@@ -98,9 +98,9 @@ def list_psalms_colon_nodes(api: Any) -> list[int]:
     L = api.L  # noqa: N806
     book_node = psalms_book_node(api)
     return [
-        hv_node
+        colon_node
         for chapter_node in L.d(book_node, otype="chapter")
-        for hv_node in L.d(chapter_node, otype="half_verse")
+        for colon_node in L.d(chapter_node, otype="half_verse")
     ]
 
 

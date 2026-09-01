@@ -9,7 +9,10 @@ never as code dependencies.
 
 * **Parallelism structure**: `parallel_*` node features on BHSA `half_verse` nodes, loaded via
   Text-Fabric's `use("etcbc/bhsa", mod="rdtaylorjr/tehillim-logos/tf")`. No local checkout
-  needed, Text-Fabric fetches and caches the module itself.
+  needed, Text-Fabric fetches and caches the module itself. The underlying annotations are
+  derived from the Logos Psalms Explorer Dataset, used with permission — see Citations below.
+* **Genre classification**: a genre-classification CSV (not included in this repo, supplied at
+  runtime) is likewise derived from the Logos Psalms Explorer Dataset — see Citations below.
 * **Embedding vectors**: Parquet files from a local `tehillim-embeddings` checkout, Hive-partitioned
   at `data/domain=semantic/model=<slug>/text=<variant>/part-0.parquet`. `--checkout` on Text-Fabric
   loaders and `embeddings_dir` on the scripts below are independent inputs.
@@ -79,12 +82,12 @@ by later scholarship (staircase/climactic, emblematic), each type reported separ
 ## Genre benchmark
 
 `src/genre` scores the same embedding models against a second, independent benchmark: does an
-embedding put same-genre psalms closer together than different-genre psalms? Ground truth is a
-third-party psalm genre classification (`psalms-browser.csv`, not included in this repo, supplied
-at runtime), which labels each of the 150 psalms with exactly one of seven genres (Lament, Praise,
-Hymn, Royal, Wisdom, Thanksgiving, Trust). This is a distinct classification from Gunkel's
-form-critical genres and from the `parallel_*` structure above. The two benchmarks share only
-their embedding inputs and their statistical machinery (`src/library`).
+embedding put same-genre psalms closer together than different-genre psalms? The labels are a
+third-party psalm genre classification (not included in this repo, supplied at runtime), which
+labels each of the 150 psalms with exactly one of seven genres (Lament, Praise, Hymn, Royal,
+Wisdom, Thanksgiving, Trust); it is a distinct data source from the `parallel_*` structure above,
+though both ultimately derive from the same dataset, used with permission (see Citations below).
+The two benchmarks share their embedding inputs and their statistical machinery (`src/library`).
 
 Every one of the C(150, 2) = 11,175 psalm pairs is scored: `genre.pairs.build_genre_pairs` labels a
 pair `same_genre` when both psalms carry the same genre. Each psalm's vector is the mean of
@@ -111,7 +114,7 @@ the resampled psalms, rather than resampling the derived pairs directly.
 
 ```bash
 .venv/bin/python -m genre.scripts.compare_calibrated \
-  /path/to/psalms-browser.csv /path/to/tehillim-embeddings/data/domain=semantic --output results.csv
+  /path/to/genre-labels.csv /path/to/tehillim-embeddings/data/domain=semantic --output results.csv
 ```
 
 ### Per-genre one-vs-rest breakdown and its inference layer
@@ -151,7 +154,7 @@ genre descriptively while still failing to clear the permutation bar, or vice ve
 
 ```bash
 .venv/bin/python -m genre.scripts.compare_by_genre \
-  /path/to/psalms-browser.csv /path/to/tehillim-embeddings/data --output results.csv
+  /path/to/genre-labels.csv /path/to/tehillim-embeddings/data --output results.csv
 ```
 
 ## Lexical benchmark
@@ -181,19 +184,35 @@ real embeddings, score N within-psalm-order-shuffled embeddings
 This replaced an earlier ad hoc z-score computed from a 30-draw empirical mean/std, which implied a
 Gaussian-tail interpretation the sample size cannot support.
 
+N is the `--n-shuffles` argument, defaulting to `library.order_shuffle.DEFAULT_N_SHUFFLES` = 1000.
+The floor `1 / (N + 1)` bounds every p-value the control can produce, so a small N caps the
+smallest reachable BH q-value as well. `library.order_shuffle.minimum_shuffles_for_fdr` returns the
+fewest shuffles whose floor still satisfies `1 / (N + 1) <= alpha / m` for m hypotheses, 19 for a
+single hypothesis and 139 for the 7 genres at alpha = 0.05, and `order_shuffle_result` warns when
+the supplied shuffle count falls under it.
+
 ```bash
 .venv/bin/python -m genre.scripts.shuffle_order_control \
-  /path/to/psalms-browser.csv /path/to/real_embeddings.parquet /path/to/shuffled_dir --output results.csv
+  /path/to/genre-labels.csv /path/to/real_embeddings.parquet /path/to/shuffled_dir --output results.csv
 .venv/bin/python -m parallelism.scripts.shuffle_order_control \
   /path/to/real_embeddings.parquet /path/to/shuffled_dir --output results.csv
 ```
 
-Run against `icf_posmean_psalm` (genre) and `icf_pos4` (parallelism): genre's Hymn and Lament
-deltas are individually significant (p=0.0323 each, the resolution ceiling at 30 shuffles) but do
-not survive BH/BY-FDR correction across the 7 genres (q=0.1129 BH, 0.2927 BY). Parallelism's
-`icf_pos4` shows a significant order effect (`delta_order=+0.1768, p=0.0323`), though the shuffle
-design alone cannot distinguish a genuine colon-order signal from a bin-adjacency artifact of
-the positional binning itself, an open question left unresolved by this control.
+Run against `icf_posmean_psalm` (genre) and `icf_pos4` (parallelism), both at 1000 shuffles.
+Genre shows an order effect in Hymn (`delta_order=+0.2584`) and Lament (`delta_order=+0.0319`),
+each at the p-value floor of 1/1001 = 0.000999, which clears FDR correction across the 7 genres
+under BH (q=0.0035) and under BY (q=0.0091). The remaining five genres show no effect, with
+`delta_order` between -0.0072 and +0.0012. Parallelism's `icf_pos4` tests a single hypothesis and
+shows an order effect (`delta_order=+0.1767, p=0.000999`), though the shuffle design alone cannot
+distinguish a genuine colon-order signal from a bin-adjacency artifact of the positional binning
+itself, an open question left unresolved by this control.
+
+An earlier run of this control used 30 shuffles, which put the p-value floor at 1/31 = 0.0323. Hymn
+and Lament landed on that floor, and two hypotheses tied there out of 7 fixed their BH q at
+(7/2) x 0.0323 = 0.1129 and their BY q at 0.2927, so the genre result could not have cleared
+q < 0.05 at any effect size. That run is archived in `tehillim-data` under
+`archive=shuffle_control_n30/`. Its failure to survive correction was a property of the shuffle
+count, and the 1000-shuffle run replaces it.
 
 ### BHSA checkout pin
 
@@ -265,10 +284,13 @@ signal, deliberately apart from the AP/AUC machinery above: a permutation test o
 psalm pairs sit closer together than different-genre pairs, on all five distance metrics. Because
 genre labels correlate with psalm length in this corpus (Hymns are short, Wisdom psalms are
 long and highly variable), raw distance comparisons are confounded with length. `residualize_by_length`
-removes that confound via a Freedman-Lane (1983) nuisance-covariate control (fit distance on
-`|length difference|`, permute genre labels against the fixed residual), which for a linear
-group-mean-difference statistic is mathematically equivalent to Freedman and Lane's residual-permute
-procedure. Three sources are reported side by side per metric: `raw`, `length_controlled`, and
+removes that confound via the Still-White (1981) nuisance-covariate control: fit distance on
+`|length difference|`, then permute genre labels against the fixed residual. Gail, Tan, and
+Piantadosi (1988) give the general covariate form, and Winkler et al. (2014) catalogue it as
+Still-White to separate it from Freedman-Lane (1983), which permutes the reduced-model residuals,
+and from Kennedy (1995), which residualizes the genre labels on the covariate as well. Neither of
+those applies here. The exchangeable unit is the psalm while the residuals live on psalm pairs, so
+the labels are the only thing that can be permuted. Three sources are reported side by side per metric: `raw`, `length_controlled`, and
 (for every metric except `content_distance` itself) `length_and_content_controlled`, which
 additionally residualizes on `content_distance` as a second covariate, isolating a structural
 metric's signal from topic.
@@ -296,7 +318,7 @@ DATA=/path/to/tehillim-data/benchmark=trajectory/domain=semantic
   /path/to/tehillim-embeddings/data/domain=semantic \
   --output-dir "$DATA/stage=profiles"
 .venv/bin/python -m trajectory.scripts.validate_against_genre \
-  /path/to/psalms-browser.csv \
+  /path/to/genre-labels.csv \
   "$DATA/stage=profiles/trajectory_distances.parquet" \
   --output "$DATA/stage=raw/validate_against_genre.csv" \
   --breakdown-output "$DATA/stage=raw/validate_against_genre_by_genre.csv"
@@ -309,26 +331,42 @@ DATA=/path/to/tehillim-data/benchmark=trajectory/domain=semantic
 
 ## Results UI
 
-The actual results page lives in a separate repo,
-[tehillim-ui](https://github.com/rdtaylorjr/tehillim-ui) — a small TypeScript project with no
-dependency on this repo's Python code, only on the JSON files this repo produces. `ui_export.export`
-selects one domain's UI columns into `ui_<domain>.json`; `ui_export.scripts.build_ui_page` then
-injects a tehillim-ui build (its bundle plus `template.html`) and every domain's JSON into one
-final, self-contained `ui.html`, filling in an empty six-table placeholder for any domain (e.g.
-`phonology`, `discourse`) that has no data yet.
+The results page lives in [tehillim](https://github.com/rdtaylorjr/tehillim), which
+depends only on the JSON this repo produces, never on its Python. Two exports feed it.
+
+`ui_export.export` selects one domain's table columns, writing `ui_<domain>.json` plus one file per
+trajectory metric, since the per-genre view reads a single metric at a time. These are small and
+ship with the site, in its `public/data`.
 
 ```bash
-git clone https://github.com/rdtaylorjr/tehillim-ui /path/to/tehillim-ui
-cd /path/to/tehillim-ui && npm install && npm run build && npm run arch-lint && cd -
-.venv/bin/python -m ui_export.scripts.build_ui_page \
-  /path/to/tehillim-data/ui_semantic.json \
-  /path/to/tehillim-data/ui_lexical.json \
-  /path/to/tehillim-data/ui_morphology.json \
-  /path/to/tehillim-data/ui_syntax.json \
-  --template /path/to/tehillim-ui/template.html \
-  --bundle /path/to/tehillim-ui/dist/app.bundle.js \
-  --output ui.html
+DATA=/path/to/tehillim-data
+SITE=/path/to/tehillim
+.venv/bin/python -m ui_export.export syntax \
+  --parallelism-dir "$DATA/benchmark=parallelism/domain=syntax" \
+  --genre-dir "$DATA/benchmark=genre/domain=syntax" \
+  --trajectory-ui-rows "$DATA/benchmark=trajectory/domain=syntax/stage=ui/ui_rows.json" \
+  --trajectory-by-genre-rows "$DATA/benchmark=trajectory/domain=syntax/stage=ui/ui_rows_by_genre.json" \
+  --output "$SITE/public/data/ui_syntax.json"
 ```
+
+`ui_export.scripts.build_detail_json` writes the per-model charts a table row opens: one file per
+model per section, because the detail view renders exactly the section the toolbar selected. These
+are large and are served from object storage rather than shipped with the site, so `--output-dir`
+points at a directory the site does not build from.
+
+```bash
+.venv/bin/python -m ui_export.scripts.build_detail_json \
+  /path/to/psalms-browser.csv \
+  --data-dir "$DATA" \
+  --ui-dir "$SITE/public/data" \
+  --domains semantic lexical morphology syntax \
+  --output-dir "$SITE/detail-data" \
+  --workers 4
+```
+
+`--ui-dir` is separate from `--data-dir` because the table payloads live with the site while the
+benchmark Parquet stays here. A model whose trajectory metrics are all NaN gets no trajectory
+section, and the page says so rather than rendering an empty chart.
 
 ## Usage
 
@@ -386,12 +424,54 @@ have any variance, since one already-cached run is not worth losing to a single 
 
 * [tehillim-embeddings](https://github.com/rdtaylorjr/tehillim-embeddings): the embedding vectors
   scored here
-* [tehillim-ui](https://github.com/rdtaylorjr/tehillim-ui): the results page that renders this
-  repo's `ui_<domain>.json` output
+* [tehillim](https://github.com/rdtaylorjr/tehillim): the results page that renders this
+  repo's `ui_<domain>.json` and per-model detail output
 * [tehillim-data](https://github.com/rdtaylorjr/tehillim-data): hosts this repo's Parquet/CSV/JSON
   output
 * [bhsa](https://github.com/etcbc/bhsa): the core text and linguistic annotation for the Hebrew
   Bible
+
+## Citations
+
+**Parallelism and genre data**
+
+> Witthoff, David, Kris Lyle, Matt Nerdahl, Jimmy Parks, and Elliot Ritzema. *Psalms Explorer
+> Dataset*. Edited by Eli Evans. Bellingham, WA: Logos Bible Software.
+> https://www.logos.com/product/54188/psalms-explorer-dataset.
+
+Used with permission.
+
+**Statistical methods**
+
+> Benjamini, Yoav, and Yosef Hochberg. "Controlling the False Discovery Rate: A Practical and
+> Powerful Approach to Multiple Testing." *Journal of the Royal Statistical Society, Series B*
+> 57.1 (1995): 289-300. https://doi.org/10.1111/j.2517-6161.1995.tb02031.x.
+
+> Benjamini, Yoav, and Daniel Yekutieli. "The Control of the False Discovery Rate in Multiple
+> Testing under Dependency." *Annals of Statistics* 29.4 (2001): 1165-1188.
+> https://doi.org/10.1214/aos/1013699998.
+
+> Efron, Bradley. "Better Bootstrap Confidence Intervals." *Journal of the American Statistical
+> Association* 82.397 (1987): 171-185. https://doi.org/10.1080/01621459.1987.10478410.
+
+> Gail, Mitchell H., Wai Y. Tan, and Steven Piantadosi. "Tests for No Treatment Effect in
+> Randomized Clinical Trials." *Biometrika* 75.1 (1988): 57-64.
+> https://doi.org/10.1093/biomet/75.1.57.
+
+> Kennedy, Peter E. "Randomization Tests in Econometrics." *Journal of Business and Economic
+> Statistics* 13.1 (1995): 85-94. https://doi.org/10.1080/07350015.1995.10524581.
+
+> Still, Arthur W., and Anthony P. White. "The Approximate Randomization Test as an Alternative to
+> the F Test in Analysis of Variance." *British Journal of Mathematical and Statistical Psychology*
+> 34.2 (1981): 243-252. https://doi.org/10.1111/j.2044-8317.1981.tb00634.x.
+
+> Westfall, Peter H., and S. Stanley Young. *Resampling-Based Multiple Testing: Examples and
+> Methods for p-Value Adjustment*. Wiley Series in Probability and Statistics. New York: Wiley,
+> 1993.
+
+> Winkler, Anderson M., Gerard R. Ridgway, Matthew A. Webster, Stephen M. Smith, and Thomas E.
+> Nichols. "Permutation Inference for the General Linear Model." *NeuroImage* 92 (2014): 381-397.
+> https://doi.org/10.1016/j.neuroimage.2014.01.060.
 
 ## License
 

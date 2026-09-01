@@ -13,9 +13,9 @@ from genre.pairs import GenrePair, build_genre_pairs
 from genre.scripts.compare_calibrated import compare_genre_calibrated
 from library.bhsa import DEFAULT_CHECKOUT, list_psalms_cola_by_psalm, load_bhsa_api
 from library.calibration import BackgroundStats, background_similarity_stats, calibrated_z_score
-from library.centroid import psalm_centroids
-from library.embeddings import dataset_identifier, load_embeddings
+from library.embeddings import dataset_identifier
 from library.incremental_cache import load_cached_parquet_set
+from library.psalm_vectors import load_psalm_vectors
 from library.retrieval_metrics import paired_cosine_similarity
 
 _OUTPUT_FILES = ("genre_pair_detail.parquet", "genre_summary.parquet")
@@ -111,8 +111,7 @@ def main() -> None:
         if model in cached_models:
             continue
         print(f"processing {model}")
-        node_vectors = load_embeddings(path)
-        psalm_vectors = psalm_centroids(cola_by_psalm, node_vectors)
+        psalm_vectors = load_psalm_vectors(path, cola_by_psalm)
         background = background_similarity_stats(np.stack(list(psalm_vectors.values())))
 
         try:

@@ -6,15 +6,20 @@ import pytest
 
 from library.multiple_comparisons import benjamini_hochberg, benjamini_yekutieli
 from trajectory.scripts.validate_against_genre import (
+    _METRICS,
     _null_gaps,
     add_fdr_columns,
     add_genre_breakdown_fdr_columns,
+    breakdown_path_for,
     build_genre_breakdown_rows,
     build_validation_row,
     observed_gap,
     permutation_test,
     residualize_by_length,
     residualize_on_covariates,
+    same_genre_matrix,
+    validate_models,
+    validate_one_model,
 )
 
 
@@ -515,3 +520,129 @@ def test_add_genre_breakdown_fdr_columns_scopes_correction_separately_per_genre(
     merged = result[result["genre"] == "A"].sort_values("model")
     isolated = genre_a_only.sort_values("model")
     assert merged["perm_q"].to_numpy() == pytest.approx(isolated["perm_q"].to_numpy())
+
+
+def _distances_frame() -> pd.DataFrame:
+    rng = np.random.default_rng(3)
+    rows = []
+    for model in ("phrase_a", "phrase_b", "phrase_c"):
+        for a, b in combinations(range(1, 9), 2):
+            rows.append(
+                {
+                    "model": model,
+                    "psalm_a": a,
+                    "psalm_b": b,
+                    "content_distance": float(rng.random()),
+                    "structural_distance": float(rng.random()),
+                    "adjacent_similarity_distance": float(rng.random()),
+                    "step_magnitude_distance": float(rng.random()),
+                    "turning_angle_distance": float(rng.random()),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+_GENRES = {
+    1: "Hymn",
+    2: "Hymn",
+    3: "Hymn",
+    4: "Lament",
+    5: "Lament",
+    6: "Lament",
+    7: "Wisdom",
+    8: "Wisdom",
+}
+_N_COLA = {p: 10 + p for p in range(1, 9)}
+
+
+def test_validate_one_model_returns_a_row_per_metric() -> None:
+    df = _distances_frame()
+    group = df[df.model == "phrase_a"]
+
+    rows, breakdown = validate_one_model("phrase_a", group, _GENRES, _N_COLA, 200, 0)
+
+    assert {r["metric"] for r in rows} == set(_METRICS)
+    assert all(r["model"] == "phrase_a" for r in rows)
+    assert breakdown
+
+
+def test_validate_models_matches_running_each_model_alone() -> None:
+    df = _distances_frame()
+
+    together, _ = validate_models(df, _GENRES, _N_COLA, 200, 0, max_workers=2)
+    apart = [
+        row
+        for model in sorted(df["model"].unique())
+        for row in validate_one_model(model, df[df.model == model], _GENRES, _N_COLA, 200, 0)[0]
+    ]
+
+    def key(row: dict) -> tuple[str, str]:
+        return (row["model"], row["metric"])
+
+    assert [key(r) for r in sorted(together, key=key)] == [key(r) for r in sorted(apart, key=key)]
+    for a, b in zip(sorted(together, key=key), sorted(apart, key=key), strict=True):
+        assert a["raw_gap"] == pytest.approx(b["raw_gap"])
+        assert a["length_controlled_p"] == pytest.approx(b["length_controlled_p"])
+
+
+def test_validate_models_is_deterministic_regardless_of_worker_count() -> None:
+    df = _distances_frame()
+
+    one, _ = validate_models(df, _GENRES, _N_COLA, 200, 0, max_workers=1)
+    four, _ = validate_models(df, _GENRES, _N_COLA, 200, 0, max_workers=4)
+
+    def key(row: dict) -> tuple[str, str]:
+        return (row["model"], row["metric"])
+
+    for a, b in zip(sorted(one, key=key), sorted(four, key=key), strict=True):
+        assert a["length_controlled_p"] == pytest.approx(b["length_controlled_p"])
+        assert a["raw_effect_size"] == pytest.approx(b["raw_effect_size"])
+
+
+def test_same_genre_matrix_is_identical_for_a_repeated_seed() -> None:
+    labels = np.array(["Hymn", "Hymn", "Lament", "Lament", "Wisdom"])
+    idx_a = np.array([0, 1, 2, 3])
+    idx_b = np.array([1, 2, 3, 4])
+
+    first = same_genre_matrix(idx_a, idx_b, labels, 50, np.random.default_rng(0))
+    second = same_genre_matrix(idx_a, idx_b, labels, 50, np.random.default_rng(0))
+
+    assert np.array_equal(first, second)
+
+
+def test_permutation_test_with_a_supplied_matrix_matches_building_it_inline() -> None:
+    rng_values = np.random.default_rng(11)
+    labels = np.array(["Hymn", "Hymn", "Hymn", "Lament", "Lament", "Lament"])
+    idx_a = np.array([0, 1, 2, 3, 4, 0, 1])
+    idx_b = np.array([1, 2, 3, 4, 5, 4, 5])
+    distances = rng_values.random(len(idx_a))
+
+    inline = permutation_test(
+        idx_a, idx_b, distances, labels, n_permutations=200, rng=np.random.default_rng(7)
+    )
+    shared = same_genre_matrix(idx_a, idx_b, labels, 200, np.random.default_rng(7))
+    reused = permutation_test(
+        idx_a,
+        idx_b,
+        distances,
+        labels,
+        n_permutations=200,
+        rng=np.random.default_rng(7),
+        same_matrix=shared,
+    )
+
+    assert inline == pytest.approx(reused)
+
+
+def test_breakdown_path_sits_beside_the_validation_csv() -> None:
+    from pathlib import Path
+
+    assert breakdown_path_for(Path("/data/validate_against_genre.csv")) == Path(
+        "/data/validate_against_genre_by_genre.csv"
+    )
+
+
+def test_breakdown_path_keeps_a_non_standard_stem() -> None:
+    from pathlib import Path
+
+    assert breakdown_path_for(Path("out/run7.csv")) == Path("out/run7_by_genre.csv")

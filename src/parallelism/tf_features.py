@@ -32,18 +32,18 @@ def read_node_feature_values(api: Any) -> dict[int, dict[str, str]]:
 
     values: dict[int, dict[str, str]] = {}
     for chapter_node in L.d(book_node, otype="chapter"):
-        for hv_node in L.d(chapter_node, otype="half_verse"):
-            group_id = F.parallel_group_id.v(hv_node)
+        for colon_node in L.d(chapter_node, otype="half_verse"):
+            group_id = F.parallel_group_id.v(colon_node)
             if group_id is None:
                 continue
-            values[hv_node] = {
+            values[colon_node] = {
                 "parallel_group_id": group_id,
-                "parallel_member_id": F.parallel_member_id.v(hv_node),
-                "parallel_type": F.parallel_type.v(hv_node),
-                "parallel_group": F.parallel_group.v(hv_node),
-                "parallel_member": F.parallel_member.v(hv_node),
-                "parallel_signature": F.parallel_signature.v(hv_node),
-                "parallel_ambiguous": F.parallel_ambiguous.v(hv_node),
+                "parallel_member_id": F.parallel_member_id.v(colon_node),
+                "parallel_type": F.parallel_type.v(colon_node),
+                "parallel_group": F.parallel_group.v(colon_node),
+                "parallel_member": F.parallel_member.v(colon_node),
+                "parallel_signature": F.parallel_signature.v(colon_node),
+                "parallel_ambiguous": F.parallel_ambiguous.v(colon_node),
             }
     return values
 
