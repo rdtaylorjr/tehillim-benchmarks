@@ -6,6 +6,7 @@ import pyarrow.parquet as pq
 
 from library.embeddings import (
     dataset_identifier,
+    is_sparse_embeddings,
     load_embeddings,
     load_sparse_embeddings,
     split_model_name,
@@ -79,8 +80,8 @@ def test_load_embeddings_matches_a_naive_per_row_to_pylist_conversion(tmp_path: 
     vectorized = load_embeddings(path)
 
     assert set(vectorized) == set(naive)
-    for node in naive:
-        np.testing.assert_array_equal(vectorized[node], naive[node])
+    for node, expected in naive.items():
+        np.testing.assert_array_equal(vectorized[node], expected)
 
 
 def _write_sparse_parquet(
@@ -197,3 +198,53 @@ def test_split_model_name_extracts_a_variant_embedded_in_the_middle() -> None:
 
 def test_split_model_name_still_prefers_a_trailing_suffix_variant() -> None:
     assert split_model_name("bge_m3_vocalized") == ("bge_m3", "vocalized")
+
+
+def test_is_sparse_embeddings_detects_a_sparse_file(tmp_path: Path) -> None:
+    path = tmp_path / "sparse.parquet"
+    _write_sparse_parquet(path, {7: ([2], [1.0])}, dim=100)
+
+    assert is_sparse_embeddings(path) is True
+
+
+def test_is_sparse_embeddings_detects_a_dense_file(tmp_path: Path) -> None:
+    path = tmp_path / "dense.parquet"
+    _write_parquet(path, {7: [1.0, 2.0]})
+
+    assert is_sparse_embeddings(path) is False
+
+
+def test_load_embeddings_reads_a_sparse_file_transparently(tmp_path: Path) -> None:
+    path = tmp_path / "sparse.parquet"
+    _write_sparse_parquet(path, {7: ([1, 3], [1.0, 0.5]), 8: ([0], [2.0])}, dim=5)
+
+    vectors = load_embeddings(path)
+
+    assert sorted(vectors) == [7, 8]
+    assert np.array_equal(vectors[7], np.array([0.0, 1.0, 0.0, 0.5, 0.0], dtype="<f4"))
+    assert np.array_equal(vectors[8], np.array([2.0, 0.0, 0.0, 0.0, 0.0], dtype="<f4"))
+
+
+def test_load_embeddings_gives_the_same_result_for_sparse_and_dense_forms(tmp_path: Path) -> None:
+    dense_path, sparse_path = tmp_path / "d.parquet", tmp_path / "s.parquet"
+    _write_parquet(dense_path, {7: [0.0, 1.0, 0.0, 0.5, 0.0], 8: [2.0, 0.0, 0.0, 0.0, 0.0]})
+    _write_sparse_parquet(sparse_path, {7: ([1, 3], [1.0, 0.5]), 8: ([0], [2.0])}, dim=5)
+
+    dense, sparse = load_embeddings(dense_path), load_embeddings(sparse_path)
+
+    assert sorted(dense) == sorted(sparse)
+    assert all(np.array_equal(dense[n], sparse[n]) for n in dense)
+
+
+def test_load_embeddings_excludes_zero_norm_rows_of_a_sparse_file(tmp_path: Path) -> None:
+    path = tmp_path / "sparse.parquet"
+    _write_sparse_parquet(path, {7: ([1], [1.0]), 8: ([], [])}, dim=4)
+
+    assert sorted(load_embeddings(path)) == [7]
+
+
+def test_load_embeddings_returns_float32_for_a_sparse_file(tmp_path: Path) -> None:
+    path = tmp_path / "sparse.parquet"
+    _write_sparse_parquet(path, {7: ([1], [1.0])}, dim=4)
+
+    assert load_embeddings(path)[7].dtype == np.dtype("<f4")

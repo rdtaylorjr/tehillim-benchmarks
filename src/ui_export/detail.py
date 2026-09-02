@@ -6,8 +6,7 @@ import numpy as np
 import pandas as pd
 from sklearn.metrics import precision_recall_curve, roc_curve
 
-# Canonical scholarly ordering, matching the fixed order already used in tehillim-ui's own
-# genre-tab section-note, not alphabetical, so every parallelism view orders types the same way.
+# Canonical scholarly ordering, matching tehillim-ui's genre-tab section-note, not alphabetical.
 _PARALLELISM_TYPE_ORDER = ["Synonymous", "Antithetic", "Synthetic", "Emblematic", "Staircase"]
 
 
@@ -16,7 +15,7 @@ def raincloud_group(values: pd.Series) -> dict[str, Any]:
     arr = values.to_numpy()
     return {
         "values": [round(float(v), 4) for v in arr],
-        "n": int(len(arr)),
+        "n": len(arr),
         "mean": round(float(arr.mean()), 4),
     }
 

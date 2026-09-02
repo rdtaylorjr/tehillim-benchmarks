@@ -38,12 +38,13 @@ def benjamini_yekutieli(p_values: np.ndarray) -> np.ndarray:
 
 def add_fdr_q_values(long_df: pd.DataFrame) -> pd.DataFrame:
     """Adds BH/BY q-values, corrected within each (source, metric, scope_kind) family."""
-    result = long_df.copy()
+    result = long_df.reset_index(drop=True)
     result["q_value"] = np.nan
     result["q_value_by"] = np.nan
     is_p_value = result["metric"].isin(_P_VALUE_METRICS)
     group_cols = ["source", "metric", "scope_kind"]
-    for _key, group in result[is_p_value].groupby(group_cols):
+    # dropna=False so a family with a missing key still gets q-values instead of vanishing.
+    for _key, group in result[is_p_value].groupby(group_cols, dropna=False):
         values = group["value"].to_numpy()
         result.loc[group.index, "q_value"] = benjamini_hochberg(values)
         result.loc[group.index, "q_value_by"] = benjamini_yekutieli(values)

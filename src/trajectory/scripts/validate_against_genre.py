@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 
 from genre.genre_labels import load_genre_by_psalm
-from library.bhsa import DEFAULT_CHECKOUT, list_psalms_cola_by_psalm, load_bhsa_api
+from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verses_by_psalm, load_bhsa_api
 from library.multiple_comparisons import add_fdr_q_values, benjamini_hochberg, benjamini_yekutieli
 from trajectory.genre_breakdown import joint_genre_breakdown_permutation_test
 
@@ -21,6 +21,8 @@ _METRICS = (
     "turning_angle_distance",
 )
 _SOURCES = ("raw", "length_controlled", "length_and_content_controlled")
+# Both sides need two pairs before a gap between their means means anything.
+_MIN_PAIRS_PER_SIDE = 2
 
 
 def observed_gap(distances: np.ndarray, same_genre: np.ndarray) -> float:
@@ -84,8 +86,8 @@ def permutation_test(
         same_matrix = same_genre_matrix(idx_a, idx_b, genre_labels, n_permutations, rng)
     null_gaps = _null_gaps(same_matrix, distances)
 
-    p_value = (np.sum(null_gaps >= observed) + 1) / (n_permutations + 1)
-    null_std = null_gaps.std()
+    p_value = (np.sum(null_gaps >= observed) + 1) / (len(null_gaps) + 1)
+    null_std = null_gaps.std(ddof=1)
     effect_size = (observed - null_gaps.mean()) / null_std if null_std > 0 else float("nan")
     return observed, float(p_value), float(effect_size)
 
@@ -94,7 +96,7 @@ def _subset_and_length_diff(
     metric: str,
     base_subset: pd.DataFrame,
     index_of: dict[int, int],
-    n_cola: dict[int, int],
+    n_half_verses: dict[int, int],
 ) -> tuple[pd.DataFrame, np.ndarray, np.ndarray, np.ndarray]:
     """Filters to non-NaN pairs for this metric, returning subset, idx_a/idx_b, |length diff|."""
     has_content_covariate = metric != "content_distance"
@@ -102,7 +104,11 @@ def _subset_and_length_diff(
     subset = base_subset[base_subset[required].notna().all(axis=1)]
     idx_a = subset["psalm_a"].map(index_of).to_numpy()
     idx_b = subset["psalm_b"].map(index_of).to_numpy()
-    length_diff = (subset["psalm_a"].map(n_cola) - subset["psalm_b"].map(n_cola)).abs().to_numpy()
+    length_diff = (
+        (subset["psalm_a"].map(n_half_verses) - subset["psalm_b"].map(n_half_verses))
+        .abs()
+        .to_numpy()
+    )
     return subset, idx_a, idx_b, length_diff
 
 
@@ -132,13 +138,13 @@ def build_validation_row(
     base_subset: pd.DataFrame,
     index_of: dict[int, int],
     genre_labels: np.ndarray,
-    n_cola: dict[int, int],
+    n_half_verses: dict[int, int],
     n_permutations: int,
     seed: int,
 ) -> dict[str, str | int | float]:
     """One (model, metric) row of gap+p per source in _SOURCES, excluding NaN-valued pairs."""
     subset, idx_a, idx_b, length_diff = _subset_and_length_diff(
-        metric, base_subset, index_of, n_cola
+        metric, base_subset, index_of, n_half_verses
     )
     same_genre = genre_labels[idx_a] == genre_labels[idx_b]
 
@@ -148,7 +154,10 @@ def build_validation_row(
         "n_pairs_total": len(base_subset),
         "n_pairs_valid": len(subset),
     }
-    if int(same_genre.sum()) < 2 or int((~same_genre).sum()) < 2:
+    if (
+        int(same_genre.sum()) < _MIN_PAIRS_PER_SIDE
+        or int((~same_genre).sum()) < _MIN_PAIRS_PER_SIDE
+    ):
         for source in _SOURCES:
             row[f"{source}_gap"] = float("nan")
             row[f"{source}_p"] = float("nan")
@@ -189,13 +198,13 @@ def build_genre_breakdown_rows(
     base_subset: pd.DataFrame,
     index_of: dict[int, int],
     genre_labels: np.ndarray,
-    n_cola: dict[int, int],
+    n_half_verses: dict[int, int],
     n_permutations: int,
     seed: int,
 ) -> list[dict[str, str | int | float]]:
     """One row per (genre, available source): one-vs-rest distance gap, perm p, and maxT p."""
     subset, idx_a, idx_b, length_diff = _subset_and_length_diff(
-        metric, base_subset, index_of, n_cola
+        metric, base_subset, index_of, n_half_verses
     )
     if len(subset) == 0:
         return []
@@ -269,10 +278,7 @@ def add_fdr_columns(rows: list[dict[str, str | int | float]]) -> pd.DataFrame:
 
 
 def add_genre_breakdown_fdr_columns(rows: list[dict[str, str | int | float]]) -> pd.DataFrame:
-    """Adds BH/BY q-values to p_perm/p_maxT, corrected across models within each (metric, source,
-
-    genre) family, mirroring compare_by_genre.py's per-genre-across-models correction scope.
-    """
+    """Adds BH/BY q-values to p_perm/p_maxT, corrected within each (metric, source, genre)."""
     df = pd.DataFrame(rows)
     df["perm_q"] = np.nan
     df["perm_q_by"] = np.nan
@@ -296,7 +302,7 @@ def validate_one_model(
     model: str,
     group: pd.DataFrame,
     genre_by_psalm: dict[int, str],
-    n_cola: dict[int, int],
+    n_half_verses: dict[int, int],
     n_permutations: int,
     seed: int,
 ) -> tuple[list[dict[str, Any]], list[dict[str, str | int | float]]]:
@@ -313,12 +319,26 @@ def validate_one_model(
     for metric in _METRICS:
         rows.append(
             build_validation_row(
-                model, metric, base_subset, index_of, genre_labels, n_cola, n_permutations, seed
+                model,
+                metric,
+                base_subset,
+                index_of,
+                genre_labels,
+                n_half_verses,
+                n_permutations,
+                seed,
             )
         )
         breakdown_rows.extend(
             build_genre_breakdown_rows(
-                model, metric, base_subset, index_of, genre_labels, n_cola, n_permutations, seed
+                model,
+                metric,
+                base_subset,
+                index_of,
+                genre_labels,
+                n_half_verses,
+                n_permutations,
+                seed,
             )
         )
     return rows, breakdown_rows
@@ -327,7 +347,7 @@ def validate_one_model(
 def validate_models(
     distances_df: pd.DataFrame,
     genre_by_psalm: dict[int, str],
-    n_cola: dict[int, int],
+    n_half_verses: dict[int, int],
     n_permutations: int,
     seed: int,
     max_workers: int = 4,
@@ -339,7 +359,13 @@ def validate_models(
     with ProcessPoolExecutor(max_workers=max_workers) as pool:
         futures = [
             pool.submit(
-                validate_one_model, model, group, genre_by_psalm, n_cola, n_permutations, seed
+                validate_one_model,
+                model,
+                group,
+                genre_by_psalm,
+                n_half_verses,
+                n_permutations,
+                seed,
             )
             for model, group in groups
         ]
@@ -369,12 +395,12 @@ def main() -> None:
     args = parser.parse_args()
 
     api = load_bhsa_api(args.checkout)
-    n_cola = {p: len(nodes) for p, nodes in list_psalms_cola_by_psalm(api).items()}
+    n_half_verses = {p: len(nodes) for p, nodes in list_psalms_half_verses_by_psalm(api).items()}
     genre_by_psalm = load_genre_by_psalm(args.genre_csv)
     distances_df = pd.read_parquet(args.distances_parquet)
 
     rows, all_breakdown_rows = validate_models(
-        distances_df, genre_by_psalm, n_cola, args.n_permutations, args.seed, args.workers
+        distances_df, genre_by_psalm, n_half_verses, args.n_permutations, args.seed, args.workers
     )
 
     result_df = add_fdr_columns(rows)
@@ -383,11 +409,11 @@ def main() -> None:
         header = f"{row['model']:55s} {row['metric']:28s}"
         counts = f"n_valid={row['n_pairs_valid']}/{row['n_pairs_total']}"
         parts = [f"{header} {counts}"]
-        for source in _SOURCES:
-            parts.append(
-                f"{source}_p={row[f'{source}_p']:.4f} q={row[f'{source}_q']:.4f} "
-                f"z={row[f'{source}_effect_size']:.3f}"
-            )
+        parts.extend(
+            f"{source}_p={row[f'{source}_p']:.4f} q={row[f'{source}_q']:.4f} "
+            f"z={row[f'{source}_effect_size']:.3f}"
+            for source in _SOURCES
+        )
         print(" ".join(parts))
 
     if args.output:

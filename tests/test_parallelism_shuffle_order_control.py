@@ -73,8 +73,7 @@ class TestScoreSeparationAuc:
         ]
         pairs = build_retrieval_pairs(groups)
         path = tmp_path / "embeddings.parquet"
-        # Every pair's source/target are orthogonal to each other but identical across pairs,
-        # so true-pair similarity (0) is no better than other-pair similarity (also 0 or 1).
+        # Source and target are orthogonal in a pair but identical across pairs, so AUC is chance.
         _write_parquet(
             path,
             {
@@ -97,8 +96,7 @@ class TestScoreSeparationAuc:
         ]
         pairs = build_retrieval_pairs(groups)
         path = tmp_path / "embeddings.parquet"
-        # node 2 has a zero vector: load_embeddings excludes it, so g1's pair is dropped,
-        # leaving g2 and g3, still enough pairs for a well-defined AUC.
+        # Node 2's zero vector is excluded, dropping g1 and leaving g2 and g3 for a defined AUC.
         _write_parquet(
             path,
             {

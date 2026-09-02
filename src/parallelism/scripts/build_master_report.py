@@ -7,6 +7,7 @@ import pandas as pd
 
 from library.embeddings import split_model_name
 from library.multiple_comparisons import add_fdr_q_values
+from library.rows_output import write_dataframe_parquet
 
 _RETRIEVAL_OVERALL_METRICS = [
     "n_pairs",
@@ -159,13 +160,13 @@ def main() -> None:
     scope_baseline_df = pd.read_parquet(args.detail_dir / "type_vs_baseline.parquet")
 
     long_df = build_long_metrics(retrieval_df, calibration_df, scope_baseline_df)
-    long_df.to_parquet(args.output_dir / "model_metrics_long.parquet", index=False)
+    write_dataframe_parquet(args.output_dir / "model_metrics_long.parquet", long_df)
 
     overall_wide = _pivot_wide(long_df, "overall", ["model", "model_base", "text_variant"])
-    overall_wide.to_parquet(args.output_dir / "model_metrics_overall.parquet", index=False)
+    write_dataframe_parquet(args.output_dir / "model_metrics_overall.parquet", overall_wide)
 
     by_type_wide = _pivot_wide(long_df, "type", ["model", "model_base", "text_variant", "scope"])
-    by_type_wide.to_parquet(args.output_dir / "model_metrics_by_type.parquet", index=False)
+    write_dataframe_parquet(args.output_dir / "model_metrics_by_type.parquet", by_type_wide)
 
     print(f"model_metrics_long: {len(long_df)} rows")
     print(f"model_metrics_overall: {len(overall_wide)} rows")

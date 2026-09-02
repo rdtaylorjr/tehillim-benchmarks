@@ -1,8 +1,10 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 
-from genre.pairs import GenrePair
-from genre.scripts.export_detail import build_pair_detail_rows, build_summary_rows
+from genre.pairs import GenrePair, build_genre_pairs
+from genre.scripts.export_detail import build_pair_detail_rows, build_summary_rows, score_model
 from library.calibration import BackgroundStats
 
 
@@ -60,3 +62,33 @@ def test_build_summary_rows_has_one_row_summarizing_the_model() -> None:
     assert rows[0]["gap"] == pytest.approx(
         rows[0]["same_genre_effect_size"] - rows[0]["different_genre_effect_size"]
     )
+
+
+def test_score_model_returns_pair_and_summary_rows_for_one_file(
+    tmp_path: Path, write_embeddings_parquet
+) -> None:
+    path = write_embeddings_parquet(
+        tmp_path / "domain=d" / "model=mine" / "v.parquet",
+        {1: [1.0, 0.0], 2: [0.9, 0.1], 3: [0.0, 1.0], 4: [0.1, 0.9]},
+    )
+    pairs = build_genre_pairs({1: "A", 2: "A", 3: "B", 4: "B"})
+
+    pair_rows, summary_rows = score_model(path, {p: [p] for p in (1, 2, 3, 4)}, pairs)
+
+    assert len(pair_rows) == len(pairs)
+    assert {row["model"] for row in pair_rows} == {"mine"}
+    assert len(summary_rows) == 1
+    assert summary_rows[0]["model"] == "mine"
+
+
+def test_score_model_skips_a_model_whose_background_has_no_variance(
+    tmp_path: Path, write_embeddings_parquet
+) -> None:
+    """Identical psalm vectors give a zero-variance background, which cannot be calibrated."""
+    path = write_embeddings_parquet(
+        tmp_path / "domain=d" / "model=flat" / "v.parquet",
+        {1: [1.0, 0.0], 2: [1.0, 0.0], 3: [1.0, 0.0], 4: [1.0, 0.0]},
+    )
+    pairs = build_genre_pairs({1: "A", 2: "A", 3: "B", 4: "B"})
+
+    assert score_model(path, {p: [p] for p in (1, 2, 3, 4)}, pairs) == ([], [])

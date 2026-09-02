@@ -42,31 +42,6 @@ def _dense_pair_matrices(
     return distance_matrix, mask_matrix
 
 
-def _batched_one_vs_rest_gap_naive(
-    distances: np.ndarray, idx_a: np.ndarray, idx_b: np.ndarray, is_target_batch: np.ndarray
-) -> np.ndarray:
-    """Reference implementation: explicit (permutations x pairs) masking, kept only for testing.
-
-    same is always a subset of population (both-target implies at-least-one-target), so the
-    population sum/count minus the same sum/count gives the different-genre side directly.
-    """
-    same_batch = is_target_batch[:, idx_a] & is_target_batch[:, idx_b]
-    population_batch = is_target_batch[:, idx_a] | is_target_batch[:, idx_b]
-    d = distances.astype(np.float64, copy=False)
-
-    same_sum = same_batch.astype(np.float64) @ d
-    same_count = same_batch.sum(axis=1).astype(np.float64)
-    population_sum = population_batch.astype(np.float64) @ d
-    population_count = population_batch.sum(axis=1).astype(np.float64)
-    diff_sum = population_sum - same_sum
-    diff_count = population_count - same_count
-
-    with np.errstate(invalid="ignore", divide="ignore"):
-        gap = (diff_sum / diff_count) - (same_sum / same_count)
-    invalid = (same_count == 0) | (diff_count == 0)
-    return np.where(invalid, np.nan, gap)
-
-
 def _batched_one_vs_rest_gap(
     is_target_batch: np.ndarray,
     distance_matrix: np.ndarray,
@@ -76,16 +51,7 @@ def _batched_one_vs_rest_gap(
     total_sum: float,
     total_count: float,
 ) -> np.ndarray:
-    """Vectorized per-permutation one-vs-rest gap via quadratic forms over the dense pair matrices.
-
-    Reformulates the (same/population) sums as t^T D t style quadratic forms over the n x n
-    psalm-pair matrix (t the 0/1 target-membership vector for one permutation draw) instead of
-    materializing a (permutations x pairs) intermediate: "neither" (both sides non-target) is
-    computed from (1-t), using (1-t)^T D = D_colsum - t^T D so only one (permutations x n) @
-    (n x n) matmul per quantity is needed, replacing an O(permutations x pairs) cost with
-    O(permutations x psalms^2). Proven exactly equivalent to `_batched_one_vs_rest_gap_naive`,
-    not an approximation, in tests/test_trajectory_genre_breakdown.py.
-    """
+    """Per-permutation one-vs-rest gap as quadratic forms over the dense psalm-pair matrices."""
     t = is_target_batch.astype(np.float64)
     not_t = 1.0 - t
 
@@ -116,13 +82,7 @@ def joint_genre_breakdown_permutation_test(
     n_permutations: int = 2000,
     rng: np.random.Generator | None = None,
 ) -> GenreBreakdownResult:
-    """One-sided permutation p per genre's one-vs-rest distance gap, plus a Westfall-Young maxT.
-
-    Mirrors genre.permutation.joint_psalm_label_permutation_test's joint-null construction (one
-    shared per-permutation genre-label draw so the maxT correction across genres is valid), but
-    for a mean-distance gap statistic instead of an AUC, matching this module's distances-based
-    (not similarity-based) inputs.
-    """
+    """One-sided permutation p per genre's one-vs-rest distance gap, plus a Westfall-Young maxT."""
     rng = rng if rng is not None else np.random.default_rng()
     n_genres = len(genres)
     n = len(genre_codes)

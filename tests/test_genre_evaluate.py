@@ -171,3 +171,30 @@ def test_skips_a_pair_whose_psalm_has_no_vector() -> None:
 
     assert report.n_same_genre == 1
     assert report.n_different_genre == 2
+
+
+def test_evaluate_genre_discrimination_sparse_agrees_with_dense_at_realistic_density() -> None:
+    """The exact-equality case has at most 5 nonzeros a row; dense rows agree only to float32."""
+    rng = np.random.default_rng(11)
+    dim = 512
+    psalm_ids = list(range(1, 13))
+    dense_vectors = {p: rng.standard_normal(dim) for p in psalm_ids}
+    pairs = [
+        GenrePair(
+            a, b, "Lament", "Lament" if (a + b) % 2 else "Praise", same_genre=(a + b) % 2 == 1
+        )
+        for a in psalm_ids
+        for b in psalm_ids
+        if a < b
+    ]
+    sparse_matrix = sp.csr_matrix(np.stack([dense_vectors[p] for p in psalm_ids]))
+
+    dense_report = evaluate_genre_discrimination(pairs, dense_vectors)
+    sparse_report = evaluate_genre_discrimination_sparse(pairs, psalm_ids, sparse_matrix)
+
+    assert sparse_report.n_same_genre == dense_report.n_same_genre
+    assert sparse_report.n_different_genre == dense_report.n_different_genre
+    assert sparse_report.average_precision == pytest.approx(
+        dense_report.average_precision, abs=1e-6
+    )
+    assert sparse_report.separation_auc == pytest.approx(dense_report.separation_auc, abs=1e-6)

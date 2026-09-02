@@ -6,7 +6,7 @@ import numpy as np
 
 @numba.njit(cache=True)
 def _dtw_accumulated_cost_jit(cost_matrix: np.ndarray) -> np.ndarray:
-    """JIT-compiled Sakoe-Chiba symmetric-form DP recursion, the hot path over up to 325 cola."""
+    """JIT-compiled Sakoe-Chiba symmetric-form DP recursion, the hot path over 325 half-verses."""
     n, m = cost_matrix.shape
     accumulated = np.zeros((n, m))
     accumulated[0, 0] = cost_matrix[0, 0]

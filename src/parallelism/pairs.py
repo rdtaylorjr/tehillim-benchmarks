@@ -1,6 +1,7 @@
 """Decomposes parallelism groups into retrieval pairs; a chiasm pairs by letter identity."""
 
-from collections.abc import Mapping
+import itertools
+from collections.abc import Container
 from dataclasses import dataclass
 
 from parallelism.tf_features import ReconstructedGroup
@@ -62,7 +63,7 @@ def _positions_for_signature(signature: str) -> list[tuple[int, int]]:
         if idx in resolved:
             continue
         positions = list(range(offsets[idx], offsets[idx] + len(segment)))
-        for a, b in zip(positions, positions[1:], strict=False):
+        for a, b in itertools.pairwise(positions):
             position_pairs.append((a, b))
 
     return sorted(position_pairs)
@@ -74,7 +75,7 @@ def filter_pairs_by_type(pairs: list[RetrievalPair], types: frozenset[str]) -> l
 
 
 def filter_pairs_with_vectors(
-    pairs: list[RetrievalPair], node_vectors: Mapping[int, object]
+    pairs: list[RetrievalPair], node_vectors: Container[int]
 ) -> list[RetrievalPair]:
     """Retrieval pairs whose source and target nodes are all present in node_vectors."""
     return [

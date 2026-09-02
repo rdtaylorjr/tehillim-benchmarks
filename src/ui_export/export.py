@@ -74,7 +74,7 @@ _SHUFFLE_CONTROL_MODEL = r"_shuffle\d+"
 
 
 def _drop_psalm_level_models(df: pd.DataFrame) -> pd.DataFrame:
-    """Excludes _psalm[_shuffleNN]-suffixed models: degenerate for a colon-pair task."""
+    """Excludes _psalm[_shuffleNN]-suffixed models: degenerate for a half-verse-pair task."""
     return df[~df["model"].str.contains(_PSALM_LEVEL_MODEL, regex=True)]
 
 

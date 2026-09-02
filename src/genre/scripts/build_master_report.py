@@ -7,6 +7,7 @@ import pandas as pd
 
 from library.embeddings import split_model_name
 from library.multiple_comparisons import add_fdr_q_values
+from library.rows_output import write_dataframe_parquet
 
 _SUMMARY_METRICS = [
     "n_same_genre",
@@ -101,10 +102,10 @@ def main() -> None:
     bootstrap_df = pd.read_csv(args.bootstrap_csv)
 
     long_df = build_long_metrics(summary_df, bootstrap_df)
-    long_df.to_parquet(args.output_dir / "genre_metrics_long.parquet", index=False)
+    write_dataframe_parquet(args.output_dir / "genre_metrics_long.parquet", long_df)
 
     wide_df = _pivot_wide(long_df)
-    wide_df.to_parquet(args.output_dir / "genre_metrics_wide.parquet", index=False)
+    write_dataframe_parquet(args.output_dir / "genre_metrics_wide.parquet", wide_df)
 
     print(f"genre_metrics_long: {len(long_df)} rows")
     print(f"genre_metrics_wide: {len(wide_df)} rows")

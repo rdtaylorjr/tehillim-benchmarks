@@ -20,7 +20,16 @@ dev = [
     "pytest-cov>=5.0",
     "ruff>=0.6",
     "mypy>=1.10",
+    "vulture>=2.11",
+    "deptry>=0.16",
 ]
+
+[tool.deptry]
+known_first_party = ["genre", "library", "parallelism", "trajectory", "ui_export", "tools"]
+
+[tool.deptry.per_rule_ignores]
+# Tools CI invokes, so none of them is ever imported by this package.
+DEP002 = ["pytest", "pytest-cov", "ruff", "mypy", "deptry", "vulture"]
 
 [build-system]
 requires = ["setuptools>=68", "wheel"]
@@ -34,15 +43,94 @@ line-length = 100
 target-version = "py310"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B", "SIM", "N"]
+select = [
+    "A",      # builtin shadowing
+    "ANN",    # missing type annotations
+    "ARG",    # unused arguments
+    "B",      # bugbear
+    "BLE",    # blind except
+    "C4",     # comprehension rewrites
+    "C90",    # mccabe complexity
+    "DTZ",    # naive datetimes
+    "E",
+    "ERA",    # commented-out code
+    "F",
+    "FBT",    # boolean trap
+    "FURB",   # modernization
+    "I",
+    "ICN",    # import conventions
+    "INP",    # implicit namespace packages
+    "ISC",    # implicit string concat
+    "N",
+    "NPY",    # numpy-specific
+    "PD",     # pandas-vet
+    "PERF",   # performance anti-patterns
+    "PGH",    # blanket noqa and type ignore
+    "PIE",
+    "PL",     # pylint
+    "PT",     # pytest style
+    "PTH",    # use pathlib
+    "RET",    # return simplification
+    "RSE",
+    "RUF",
+    "S",      # bandit
+    "SIM",
+    "SLF",    # private member access
+    "T20",    # stray print
+    "TC",     # type-checking imports
+    "TID",    # tidy imports
+    "TRY",    # exception anti-patterns
+    "UP",
+    "W",
+]
+ignore = [
+    "TRY003",  # a specific message at the raise site beats one exception subclass per diagnostic
+]
+
+[tool.ruff.lint.per-file-ignores]
+# A vulture whitelist is by format a list of bare attribute expressions.
+".vulture-whitelist.py" = ["B018", "INP001"]
+# Tests assert, use literal fixtures, and reach into private helpers by design.
+"tests/*" = [
+    "S101",     # asserting is what a test does
+    "PLR2004",  # fixture literals are the point of the fixture
+    "INP001",   # pytest collects tests without a package marker
+    "ANN",      # fixture factories are inferred, not annotated
+    "SLF001",   # a unit test may exercise a private helper
+    "PLR0913",
+    "PLR0917",
+    "ARG",      # a test double must match the real signature it stands in for
+    "PLC0415",  # a local import keeps a narrow fake next to the test that needs it
+    "TC003",    # runtime annotations keep fixtures readable
+]
+# A script's stdout is its interface.
+"src/*/scripts/*" = ["T201"]
+"src/parallelism/evaluate.py" = ["T201"]
+"src/ui_export/export.py" = ["T201", "ANN401"]  # json_safe walks arbitrary JSON
+"tools/*" = ["T201"]
+# Text-Fabric exposes runtime-named features, so Any is the accurate annotation, not a weak one.
+"src/library/bhsa.py" = ["ANN401"]
+"src/parallelism/tf_features.py" = ["ANN401"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-args = 8
 
 [tool.mypy]
 python_version = "3.12"
 ignore_missing_imports = true
+strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["--cov=src", "--cov-report=term-missing"]
+# A numpy or scipy warning means a statistic silently degenerated, so it fails the build.
+filterwarnings = ["error"]
+markers = [
+    "integration: reads a local tehillim-embeddings checkout (see TEHILLIM_EMBEDDINGS_DATA)",
+]
 
 [tool.coverage.run]
 source = ["src"]

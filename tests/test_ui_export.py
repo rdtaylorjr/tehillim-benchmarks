@@ -196,7 +196,7 @@ def test_build_domain_data_selects_parallelism_by_type_columns() -> None:
 
 
 def test_build_domain_data_drops_psalm_level_models_from_parallelism_overall() -> None:
-    """Psalm-broadcast representations are architecturally degenerate for a colon-pair task."""
+    """Psalm-broadcast representations are architecturally degenerate for a half-verse-pair task."""
     data = build_domain_data(
         _parallelism_overall_df(),
         _parallelism_by_type_df(),
@@ -331,8 +331,7 @@ def test_build_domain_data_selects_genre_by_genre_columns() -> None:
 
 
 def test_build_domain_data_derives_model_base_and_text_variant_for_genre_by_genre() -> None:
-    """genre_by_genre.csv has no model_base/text_variant columns, so the Text filter needs them
-    derived from `model`, or selecting a text tier silently drops every by-genre row (the bug)."""
+    """genre_by_genre.csv has no model_base/text_variant columns."""
     genre_by_genre = _genre_by_genre_df()
     genre_by_genre.loc[0, "model"] = "word_consonantal_binary"
     data = build_domain_data(
@@ -456,8 +455,13 @@ def test_build_domain_data_drops_shuffle_control_models_from_every_table() -> No
         "n_same_genre": 200,
         "n_different_genre": 1900,
     }
-    trajectory_rows = _trajectory_rows() + [
-        {"model": "phrase_signature_1_2gram_shuffle03", "metric": "content_distance", "raw_p": 0.9}
+    trajectory_rows = [
+        *_trajectory_rows(),
+        {
+            "model": "phrase_signature_1_2gram_shuffle03",
+            "metric": "content_distance",
+            "raw_p": 0.9,
+        },
     ]
     trajectory_by_genre_rows = [
         {

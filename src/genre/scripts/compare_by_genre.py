@@ -1,8 +1,9 @@
-"""Runs one-vs-rest genre discrimination per model: AP/AUC point estimates, jackknife CIs, and
-psalm-label permutation p-values (naive Mann-Whitney, permuted, and Westfall-Young maxT)."""
+"""One-vs-rest genre discrimination per model: AP/AUC, jackknife CIs, and permutation p-values."""
 
 import argparse
 import sys
+from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -10,23 +11,38 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as sp
 
-from genre.bootstrap import (
-    block_bootstrap_genre_ap_gap_and_auc,
-    build_similarity_and_genre_matrices,
-)
+from genre.bootstrap import block_bootstrap_genre_ap_gap_and_auc, psalm_similarity_matrix
 from genre.evaluate import evaluate_genre_discrimination_from_matrix
 from genre.genre_labels import load_genre_by_psalm
 from genre.pairs import GenrePair, build_genre_pairs, filter_pairs_by_genre
 from genre.permutation import joint_psalm_label_permutation_test, one_vs_rest_masks
-from library.bhsa import DEFAULT_CHECKOUT, list_psalms_cola_by_psalm, load_bhsa_api
-from library.calibration import background_stats_from_matrix
-from library.centroid import psalm_centroids
-from library.embeddings import dataset_identifier, load_embeddings
+from library.ap_gap_auc_bootstrap import ApGapAucCI
+from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verses_by_psalm, load_bhsa_api
+from library.calibration import BackgroundStats, background_stats_from_matrix
+from library.embeddings import dataset_identifier
+from library.errors import BenchmarkDataError, InsufficientDataError
 from library.incremental_cache import load_cached_rows as _load_cached_rows
+from library.model_files import uncached_model_paths
 from library.multiple_comparisons import add_fdr_q_values
+from library.parallel_models import DEFAULT_MAX_WORKERS, map_in_order
+from library.psalm_vectors import load_psalm_vectors
 from library.retrieval_metrics import sparse_cosine_similarity_matrix
 
 _SOURCES = ("naive", "perm", "maxT")
+
+
+@dataclass(frozen=True, slots=True)
+class GenreRunConfig:
+    """The labels and resampling budget every model in one run is scored against."""
+
+    genre_by_psalm: dict[int, str]
+    genres: tuple[str, ...]
+    pairs: list[GenrePair]
+    n_permutations: int
+    n_resamples: int
+    seed: int
+
+
 _RAW_COLUMNS = (
     "model",
     "genre",
@@ -46,39 +62,19 @@ _RAW_COLUMNS = (
 )
 
 
-def _compare_from_similarity_matrix(
-    model: str,
+def _bootstrap_ci_or_none(
     psalm_ids: list[int],
     similarity_matrix: np.ndarray,
-    genre_by_psalm: dict[int, str],
-    genres: tuple[str, ...],
-    pairs: list[GenrePair],
-    n_permutations: int,
+    same_mask: np.ndarray,
+    population_mask: np.ndarray,
+    background: BackgroundStats,
     n_resamples: int,
     seed: int,
-) -> list[dict[str, str | int | float]]:
-    """Shared per-genre report step for both the dense and sparse psalm-vector entry points."""
-    psalm_index = {p: i for i, p in enumerate(psalm_ids)}
-    genre_codes = np.array([genres.index(genre_by_psalm[p]) for p in psalm_ids])
-    background = background_stats_from_matrix(similarity_matrix)
-
-    perm_result = joint_psalm_label_permutation_test(
-        similarity_matrix,
-        genre_codes,
-        genres,
-        n_permutations=n_permutations,
-        rng=np.random.default_rng(seed),
-    )
-
-    rows: list[dict[str, str | int | float]] = []
-    for index, genre in enumerate(genres):
-        restricted = filter_pairs_by_genre(pairs, genre)
-        report = evaluate_genre_discrimination_from_matrix(
-            restricted, similarity_matrix, psalm_index
-        )
-
-        same_mask, population_mask = one_vs_rest_masks(genre_codes, index)
-        ci = block_bootstrap_genre_ap_gap_and_auc(
+    genre: str,
+) -> ApGapAucCI | None:
+    """None for a genre whose one-vs-rest population is too small to define a CI, not a crash."""
+    try:
+        return block_bootstrap_genre_ap_gap_and_auc(
             psalm_ids,
             similarity_matrix,
             same_mask,
@@ -86,6 +82,50 @@ def _compare_from_similarity_matrix(
             n_resamples=n_resamples,
             rng=np.random.default_rng(seed),
             population_mask=population_mask,
+        )
+    except InsufficientDataError as error:
+        print(f"no bootstrap CI for genre {genre!r}: {error}", file=sys.stderr)
+        return None
+
+
+def _compare_from_similarity_matrix(
+    model: str,
+    psalm_ids: list[int],
+    similarity_matrix: np.ndarray,
+    config: GenreRunConfig,
+) -> list[dict[str, str | int | float]]:
+    """Shared per-genre report step for both the dense and sparse psalm-vector entry points."""
+    genres = config.genres
+    psalm_index = {p: i for i, p in enumerate(psalm_ids)}
+    code_of = {genre: index for index, genre in enumerate(genres)}
+    genre_codes = np.array([code_of[config.genre_by_psalm[p]] for p in psalm_ids])
+    background = background_stats_from_matrix(similarity_matrix)
+
+    perm_result = joint_psalm_label_permutation_test(
+        similarity_matrix,
+        genre_codes,
+        genres,
+        n_permutations=config.n_permutations,
+        rng=np.random.default_rng(config.seed),
+    )
+
+    rows: list[dict[str, str | int | float]] = []
+    for index, genre in enumerate(genres):
+        restricted = filter_pairs_by_genre(config.pairs, genre)
+        report = evaluate_genre_discrimination_from_matrix(
+            restricted, similarity_matrix, psalm_index
+        )
+
+        same_mask, population_mask = one_vs_rest_masks(genre_codes, index)
+        ci = _bootstrap_ci_or_none(
+            psalm_ids,
+            similarity_matrix,
+            same_mask,
+            population_mask,
+            background,
+            config.n_resamples,
+            config.seed,
+            genre,
         )
 
         rows.append(
@@ -96,15 +136,15 @@ def _compare_from_similarity_matrix(
                 "n_different_genre": report.n_different_genre,
                 "prevalence": report.prevalence,
                 "average_precision": report.average_precision,
-                "ap_ci_low": ci.ap_ci_low,
-                "ap_ci_high": ci.ap_ci_high,
+                "ap_ci_low": ci.ap_ci_low if ci else float("nan"),
+                "ap_ci_high": ci.ap_ci_high if ci else float("nan"),
                 "separation_auc": report.separation_auc,
-                "auc_ci_low": ci.auc_ci_low,
-                "auc_ci_high": ci.auc_ci_high,
+                "auc_ci_low": ci.auc_ci_low if ci else float("nan"),
+                "auc_ci_high": ci.auc_ci_high if ci else float("nan"),
                 "separation_p_naive": report.separation_p,
                 "separation_p_perm": perm_result.p_perm[index],
                 "separation_p_maxT": perm_result.p_maxT[index],
-                "n_permutations": n_permutations,
+                "n_permutations": config.n_permutations,
             }
         )
     return rows
@@ -114,54 +154,22 @@ def compare_model_across_genres(
     model: str,
     psalm_ids: list[int],
     psalm_vectors: dict[int, np.ndarray],
-    genre_by_psalm: dict[int, str],
-    genres: tuple[str, ...],
-    pairs: list[GenrePair],
-    n_permutations: int,
-    n_resamples: int,
-    seed: int,
+    config: GenreRunConfig,
 ) -> list[dict[str, str | int | float]]:
     """One row per genre: AP (point, unchanged), AUC, jackknife CIs, and three p-value sources."""
-    similarity_matrix, _ = build_similarity_and_genre_matrices(
-        psalm_ids, psalm_vectors, genre_by_psalm
-    )
-    return _compare_from_similarity_matrix(
-        model,
-        psalm_ids,
-        similarity_matrix,
-        genre_by_psalm,
-        genres,
-        pairs,
-        n_permutations,
-        n_resamples,
-        seed,
-    )
+    similarity_matrix = psalm_similarity_matrix(psalm_ids, psalm_vectors)
+    return _compare_from_similarity_matrix(model, psalm_ids, similarity_matrix, config)
 
 
 def compare_model_across_genres_sparse(
     model: str,
     psalm_ids: list[int],
     psalm_vectors: sp.csr_matrix,
-    genre_by_psalm: dict[int, str],
-    genres: tuple[str, ...],
-    pairs: list[GenrePair],
-    n_permutations: int,
-    n_resamples: int,
-    seed: int,
+    config: GenreRunConfig,
 ) -> list[dict[str, str | int | float]]:
     """Same rows as compare_model_across_genres, comparing sparse psalm vectors, never densified."""
     similarity_matrix = sparse_cosine_similarity_matrix(psalm_vectors, psalm_vectors)
-    return _compare_from_similarity_matrix(
-        model,
-        psalm_ids,
-        similarity_matrix,
-        genre_by_psalm,
-        genres,
-        pairs,
-        n_permutations,
-        n_resamples,
-        seed,
-    )
+    return _compare_from_similarity_matrix(model, psalm_ids, similarity_matrix, config)
 
 
 def load_cached_rows(cache_path: Path) -> tuple[list[dict[str, Any]], set[str]]:
@@ -202,6 +210,22 @@ def add_fdr_columns(rows: list[dict[str, Any]]) -> pd.DataFrame:
     return result
 
 
+def score_model(
+    path: Path,
+    half_verses_by_psalm: dict[int, list[int]],
+    config: GenreRunConfig,
+) -> list[dict[str, str | int | float]]:
+    """One row per genre for one model file, scored independently of every other model."""
+    model = dataset_identifier(path)
+    psalm_vectors = load_psalm_vectors(path, half_verses_by_psalm)
+    psalm_ids = sorted(set(config.genre_by_psalm) & set(psalm_vectors))
+    try:
+        return compare_model_across_genres(model, psalm_ids, psalm_vectors, config)
+    except BenchmarkDataError as error:
+        print(f"skipping {model} ({len(psalm_ids)} psalm vectors): {error}", file=sys.stderr)
+        return []
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -214,6 +238,7 @@ def main() -> None:
     parser.add_argument("--n-permutations", type=int, default=2000)
     parser.add_argument("--n-resamples", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--workers", type=int, default=DEFAULT_MAX_WORKERS)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument(
         "--cache",
@@ -226,7 +251,7 @@ def main() -> None:
     api = load_bhsa_api(args.checkout)
     genre_by_psalm = load_genre_by_psalm(args.genre_csv)
     pairs = build_genre_pairs(genre_by_psalm)
-    cola_by_psalm = list_psalms_cola_by_psalm(api)
+    half_verses_by_psalm = list_psalms_half_verses_by_psalm(api)
     genres = tuple(sorted(set(genre_by_psalm.values())))
 
     cache_path = args.cache or args.output
@@ -234,34 +259,18 @@ def main() -> None:
     if cached_models:
         print(f"reusing {len(cached_models)} cached models from {cache_path}", file=sys.stderr)
 
-    model_paths = sorted(p for p in args.embeddings_dir.glob("**/*.parquet") if p.is_file())
-    for path in model_paths:
-        model = dataset_identifier(path)
-        if model in cached_models:
-            print(f"skipping {model} (cached)", file=sys.stderr)
-            continue
-        print(f"processing {model}", file=sys.stderr)
-        node_vectors = load_embeddings(path)
-        psalm_vectors = psalm_centroids(cola_by_psalm, node_vectors)
-        psalm_ids = sorted(set(genre_by_psalm) & set(psalm_vectors))
-        try:
-            rows.extend(
-                compare_model_across_genres(
-                    model,
-                    psalm_ids,
-                    psalm_vectors,
-                    genre_by_psalm,
-                    genres,
-                    pairs,
-                    args.n_permutations,
-                    args.n_resamples,
-                    args.seed,
-                )
-            )
-        except ValueError as error:
-            print(
-                f"skipping {model}: {error} (only {len(psalm_ids)} psalm vectors)", file=sys.stderr
-            )
+    model_paths = uncached_model_paths(args.embeddings_dir, cached_models)
+    config = GenreRunConfig(
+        genre_by_psalm=genre_by_psalm,
+        genres=genres,
+        pairs=pairs,
+        n_permutations=args.n_permutations,
+        n_resamples=args.n_resamples,
+        seed=args.seed,
+    )
+    score = partial(score_model, half_verses_by_psalm=half_verses_by_psalm, config=config)
+    for model_rows in map_in_order(score, model_paths, args.workers):
+        rows.extend(model_rows)
 
     result_df = add_fdr_columns(rows)
 

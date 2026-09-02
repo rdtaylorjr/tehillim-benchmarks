@@ -4,7 +4,10 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from library.errors import InsufficientDataError
 from library.fast_metrics import fast_auc
+
+_MIN_PSALMS_FOR_PERMUTATION = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -38,13 +41,7 @@ def _one_vs_rest_auc(sims: np.ndarray, same: np.ndarray, population: np.ndarray)
 def _batched_separation(
     sims: np.ndarray, rows: np.ndarray, cols: np.ndarray, is_target_batch: np.ndarray
 ) -> np.ndarray:
-    """Batched one-vs-rest (AUC - 0.5) for many permutation draws at once, ties handled exactly.
-
-    is_target_batch: (B, n) boolean, whether each psalm carries the target genre in that draw.
-    Uses the Mann-Whitney U tie-average-rank identity (Hanley & McNeil 1982), with `sims`'
-    fixed sort computed once and reused across all B draws via cumulative population counts per
-    tie-group, instead of calling fast_auc/rankdata separately for each draw.
-    """
+    """Batched one-vs-rest (AUC - 0.5) for many draws at once, over one fixed sort of sims."""
     n_pairs = sims.shape[0]
     same_batch = is_target_batch[:, rows] & is_target_batch[:, cols]
     population_batch = is_target_batch[:, rows] | is_target_batch[:, cols]
@@ -60,9 +57,7 @@ def _batched_separation(
     same_sorted = same_batch[:, order]
     population_sorted = population_batch[:, order].astype(np.float64)
 
-    # Cumulative population count in sorted order, per permutation draw (fully vectorized: one
-    # cumsum per row, then plain fancy indexing to each position's own tie-group boundary,
-    # avoiding a per-(batch, group) scatter-add, which numpy's np.add.at cannot do at this scale).
+    # One cumsum per draw, then fancy indexing to each position's tie-group boundary.
     cum_pop_sorted = np.cumsum(population_sorted, axis=1)
     count_le = cum_pop_sorted[:, group_end_idx]
     start_before = np.clip(group_start_idx - 1, 0, None)
@@ -88,18 +83,14 @@ def joint_psalm_label_permutation_test(
     n_permutations: int = 2000,
     rng: np.random.Generator | None = None,
 ) -> GenrePermutationResult:
-    """One-sided permutation p per genre's one-vs-rest AUC, plus a Westfall-Young (1993) maxT.
-
-    Permutes the whole per-psalm genre-code assignment so every genre's null draw comes from the
-    same permutation, which is what makes the joint maxT correction valid. The one-vs-rest
-    population (which pairs count at all) depends on the labels being permuted, so the standard
-    fixed-population rank-sum vectorization trick doesn't apply here; each permutation's AUC is
-    computed via the already-verified `fast_auc`, one call per genre per permutation.
-    """
+    """One-sided permutation p per genre's one-vs-rest AUC, plus a Westfall-Young (1993) maxT."""
     rng = rng if rng is not None else np.random.default_rng()
     n = similarity_matrix.shape[0]
-    if n < 2:
-        raise ValueError(f"need at least 2 psalms for a one-vs-rest permutation test, got {n}")
+    if n < _MIN_PSALMS_FOR_PERMUTATION:
+        raise InsufficientDataError(
+            f"a one-vs-rest permutation test needs at least "
+            f"{_MIN_PSALMS_FOR_PERMUTATION} psalms, got {n}"
+        )
     rows, cols = np.triu_indices(n, k=1)
     sims = similarity_matrix[rows, cols]
     n_genres = len(genres)
@@ -108,9 +99,7 @@ def joint_psalm_label_permutation_test(
     for g in range(n_genres):
         same_mask, population_mask = one_vs_rest_masks(genre_codes, g)
         auc_observed[g] = _one_vs_rest_auc(sims, same_mask[rows, cols], population_mask[rows, cols])
-    # Signed, matching evaluate.py's alternative="greater": tests same-genre > different-genre
-    # only. An unsigned |AUC-0.5| would also flag genres separated in the OPPOSITE direction
-    # (same-genre pairs less similar than cross-genre pairs), which is a different finding.
+    # Signed, not |AUC-0.5|, so a genre separated in the opposite direction is not flagged.
     separation_observed = auc_observed - 0.5
 
     tiled_codes = np.tile(genre_codes, (n_permutations, 1))

@@ -1,4 +1,4 @@
-"""Raw cosine similarity of true parallel cola, with no comparison to any other candidate."""
+"""Raw cosine similarity of true parallel half-verses, with no comparison to any other candidate."""
 
 from dataclasses import dataclass
 

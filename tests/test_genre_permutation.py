@@ -35,7 +35,9 @@ def test_one_vs_rest_masks_matches_touches_genre_semantics() -> None:
         [False, False, False, False],
     ]
     assert population_mask[2, 3] is np.False_ or not population_mask[2, 3]
-    assert population_mask[0, 2] and population_mask[0, 3] and population_mask[1, 2]
+    assert population_mask[0, 2]
+    assert population_mask[0, 3]
+    assert population_mask[1, 2]
 
 
 def _strong_signal_fixture() -> tuple[np.ndarray, np.ndarray, tuple[str, ...]]:
@@ -125,8 +127,7 @@ def test_permutation_p_is_large_when_labels_are_unrelated_to_similarity() -> Non
         similarity_matrix, codes, genres, n_permutations=500, rng=np.random.default_rng(2)
     )
 
-    # A single random draw over 3 genres can produce one ~5% false positive by chance; the
-    # median across genres should still land solidly in the non-significant range.
+    # One genre can draw a ~5% false positive by chance, so the median should stay non-significant.
     assert float(np.median(result.p_perm)) > 0.05
 
 

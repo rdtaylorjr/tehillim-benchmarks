@@ -15,8 +15,7 @@ def test_benjamini_hochberg_matches_hand_worked_example() -> None:
 
     q = benjamini_hochberg(p)
 
-    # sorted p: 0.005, 0.01, 0.03, 0.04, 0.5 at ranks 1..5, n=5
-    # raw q = p*n/rank: 0.025, 0.025, 0.05, 0.05, 0.5 (already monotone)
+    # sorted p 0.005, 0.01, 0.03, 0.04, 0.5 at ranks 1..5, n=5; q = p*n/rank is already monotone.
     expected_sorted_order_q = np.array([0.025, 0.025, 0.05, 0.05, 0.5])
     order = np.argsort(p)
     assert q[order] == pytest.approx(expected_sorted_order_q)
@@ -108,9 +107,7 @@ def test_add_fdr_q_values_corrects_within_each_source_metric_scope_family_separa
     assert pd.isna(auc_row["q_value"])
     assert pd.isna(auc_row["q_value_by"])
 
-    # "overall" and "type" scope_kind rows, same source/metric, must be corrected as
-    # SEPARATE families: the lone "type" row's q_value must equal its own p-value (family of 1),
-    # not be pulled down by the two "overall" rows sharing its (source, metric).
+    # "overall" and "type" are separate families, so the lone "type" row's q equals its own p.
     type_row = result[
         (result["source"] == "vs_baseline")
         & (result["metric"] == "p_vs_baseline")
@@ -140,3 +137,36 @@ def test_add_fdr_q_values_only_targets_p_value_metrics() -> None:
 
     assert result[result["metric"] == "discrimination_p"]["q_value"].notna().all()
     assert pd.isna(result[result["metric"] == "mrr_forward"].iloc[0]["q_value"])
+
+
+def test_add_fdr_q_values_still_corrects_a_family_whose_scope_kind_is_missing() -> None:
+    """A NaN grouping key used to drop its whole family silently, leaving q-values unset."""
+    long_df = pd.DataFrame(
+        {
+            "source": ["a", "a", "a"],
+            "metric": ["separation_p"] * 3,
+            "scope_kind": [np.nan, np.nan, np.nan],
+            "value": [0.01, 0.02, 0.03],
+        }
+    )
+
+    result = add_fdr_q_values(long_df)
+
+    assert result["q_value"].notna().all()
+    assert result["q_value_by"].notna().all()
+
+
+def test_add_fdr_q_values_is_unaffected_by_a_duplicated_input_index() -> None:
+    """Concatenated frames can repeat index labels, which used to misalign the q-value writes."""
+    rows = {
+        "source": ["a", "a"],
+        "metric": ["separation_p", "separation_p"],
+        "scope_kind": ["s", "s"],
+        "value": [0.01, 0.9],
+    }
+    unique_index = pd.DataFrame(rows)
+    duplicated_index = pd.DataFrame(rows, index=[0, 0])
+
+    expected = add_fdr_q_values(unique_index)["q_value"].tolist()
+
+    assert add_fdr_q_values(duplicated_index)["q_value"].tolist() == expected
