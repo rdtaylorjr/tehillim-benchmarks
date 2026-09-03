@@ -11,6 +11,7 @@ from library.ap_gap_auc_bootstrap import (
 )
 from library.calibration import BackgroundStats
 from library.errors import InsufficientDataError
+from library.protocol import DEFAULT_N_RESAMPLES
 from library.retrieval_metrics import cosine_similarity_matrix
 
 
@@ -59,14 +60,14 @@ def _upper_triangle_same_and_different(
 
 
 def _resample_split(
-    idx: np.ndarray,
+    psalm_indices: np.ndarray,
     similarity_matrix: np.ndarray,
     genre_match_matrix: np.ndarray,
     population_mask: np.ndarray | None,
 ) -> Split:
     """One vertex resample's split, dropping pairs of a drawn psalm with its own duplicate copy."""
-    rows, cols = np.triu_indices(len(idx), k=1)
-    psalm_a, psalm_b = idx[rows], idx[cols]
+    rows, cols = np.triu_indices(len(psalm_indices), k=1)
+    psalm_a, psalm_b = psalm_indices[rows], psalm_indices[cols]
     # A psalm drawn twice would otherwise pair with itself at similarity 1.0, always same-genre.
     distinct = psalm_a != psalm_b
     return _split_by_pair_indices(
@@ -113,12 +114,12 @@ def block_bootstrap_genre_ap_gap_and_auc(
     similarity_matrix: np.ndarray,
     genre_match_matrix: np.ndarray,
     background: BackgroundStats,
-    n_resamples: int = 1000,
-    rng: np.random.Generator | None = None,
+    n_resamples: int = DEFAULT_N_RESAMPLES,
+    *,
+    rng: np.random.Generator,
     population_mask: np.ndarray | None = None,
 ) -> ApGapAucCI:
     """BCa 95% CI for AP (primary), gap, and AUC, resampling whole psalms with replacement."""
-    rng = rng if rng is not None else np.random.default_rng()
     n = len(psalm_ids)
     observed = _upper_triangle_same_and_different(
         similarity_matrix, genre_match_matrix, population_mask

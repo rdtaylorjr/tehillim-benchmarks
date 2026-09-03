@@ -2,6 +2,7 @@ import json
 
 import pandas as pd
 
+from library.rows_output import json_safe
 from ui_export import export
 from ui_export.export import build_domain_data
 
@@ -495,22 +496,22 @@ def test_build_domain_data_drops_shuffle_control_models_from_every_table() -> No
 def test_json_safe_replaces_non_finite_floats_with_none() -> None:
     """NaN and infinities are legal Python but not legal JSON, so they become null."""
     payload = {"gap": float("nan"), "hi": float("inf"), "lo": float("-inf"), "ok": 0.5}
-    assert export.json_safe(payload) == {"gap": None, "hi": None, "lo": None, "ok": 0.5}
+    assert json_safe(payload) == {"gap": None, "hi": None, "lo": None, "ok": 0.5}
 
 
 def test_json_safe_walks_nested_lists_and_dicts() -> None:
     payload = {"rows": [{"p": float("nan")}, {"p": 0.25}]}
-    assert export.json_safe(payload) == {"rows": [{"p": None}, {"p": 0.25}]}
+    assert json_safe(payload) == {"rows": [{"p": None}, {"p": 0.25}]}
 
 
 def test_json_safe_leaves_other_values_untouched() -> None:
     payload = {"model": "alephbert", "n": 1110, "flag": True, "missing": None}
-    assert export.json_safe(payload) == payload
+    assert json_safe(payload) == payload
 
 
 def test_exported_payload_is_strict_json() -> None:
     """allow_nan=False is the guard: a stray non-finite value fails the export loudly."""
-    payload = export.json_safe({"a": float("nan")})
+    payload = json_safe({"a": float("nan")})
     assert json.dumps(payload, allow_nan=False) == '{"a": null}'
 
 

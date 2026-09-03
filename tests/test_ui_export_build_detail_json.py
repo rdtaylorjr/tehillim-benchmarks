@@ -451,3 +451,18 @@ class TestBuildDomain:
         names = sorted(p.name for p in output_dir.glob("*.json"))
         assert "detail_syntax_a_genre.json" not in names
         assert "detail_syntax_a_parallelism.json" in names
+
+
+def test_a_task_names_itself_by_its_model_for_the_skip_report() -> None:
+    """The batch reports a skipped item by name, so a task has to say which model it is."""
+    from ui_export.scripts.build_detail_json import _ModelTask, _task_model
+
+    task = _ModelTask(
+        model="alephbert_consonantal",
+        domain="semantic",
+        output_dir=Path("out"),
+        genres=["Hymn"],
+        inputs=None,
+    )
+
+    assert _task_model(task) == "alephbert_consonantal"

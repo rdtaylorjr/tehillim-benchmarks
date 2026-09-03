@@ -9,6 +9,8 @@ from parallelism.tf_features import ReconstructedGroup
 
 @dataclass(frozen=True, slots=True)
 class RetrievalPair:
+    """One annotated parallelism: its two half-verse spans and how they were labelled."""
+
     pair_id: str
     group_range: str
     parallelism_type: str
@@ -52,12 +54,11 @@ def _positions_for_signature(signature: str) -> list[tuple[int, int]]:
         for pos, letter in enumerate(seg_j):
             seg_j_positions.setdefault(letter, []).append(pos)
         for pos_i, letter in enumerate(seg_i):
+            #: The linker matches letters as multisets, so each occurrence has exactly one partner.
             occurrence = next_index_for_letter.get(letter, 0)
-            candidates = seg_j_positions.get(letter, [])
-            if occurrence >= len(candidates):
-                continue
             next_index_for_letter[letter] = occurrence + 1
-            position_pairs.append((offsets[i] + pos_i, offsets[j] + candidates[occurrence]))
+            partner = seg_j_positions[letter][occurrence]
+            position_pairs.append((offsets[i] + pos_i, offsets[j] + partner))
 
     for idx, segment in enumerate(segments):
         if idx in resolved:

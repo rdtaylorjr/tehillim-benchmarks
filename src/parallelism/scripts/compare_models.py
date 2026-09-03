@@ -1,19 +1,19 @@
 """Runs run_evaluation across every embedding file in a directory, ranked by separation AUC."""
 
 import argparse
-import sys
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 
-from library.bhsa import DEFAULT_CHECKOUT
+from library.cli import add_embeddings_dir_argument, add_scoring_arguments, resume_from_cache
 from library.embeddings import dataset_identifier
-from library.incremental_cache import load_cached_rows
-from library.model_files import uncached_model_paths
-from library.parallel_models import DEFAULT_MAX_WORKERS, map_in_order
+from library.protocol import DEFAULT_N_GROUP_PERMUTATIONS
 from library.rows_output import write_rows_csv
+from library.scoring import skipping_unscorable
+from library.worker_pool import DEFAULT_MAX_WORKERS, map_in_order
 from parallelism.evaluate import score_embedding_file
 from parallelism.pairs import RetrievalPair, build_retrieval_pairs
 from parallelism.tf_features import load_api, read_node_feature_values, reconstruct_groups
@@ -66,37 +66,35 @@ def score_model(
 def compare_models(
     pairs: list[RetrievalPair],
     model_paths: list[Path],
-    n_permutations: int = 2000,
+    n_permutations: int = DEFAULT_N_GROUP_PERMUTATIONS,
     seed: int = 0,
     max_workers: int = DEFAULT_MAX_WORKERS,
 ) -> list[dict[str, str | int | float]]:
     """Scores every model file across workers, rows sorted by separation AUC descending."""
     score = partial(score_model, pairs=pairs, n_permutations=n_permutations, seed=seed)
-    rows = map_in_order(score, model_paths, max_workers)
+    scored = map_in_order(skipping_unscorable(score), model_paths, max_workers)
+    rows = [row for row in scored if row is not None]
     rows.sort(key=lambda r: cast("float", r["separation_auc"]), reverse=True)
     return rows
 
 
-def main() -> None:
+def main(
+    argv: list[str] | None = None,
+    *,
+    api_factory: Callable[[str], Any] = load_api,
+) -> None:
+    """Parses the arguments this module documents, runs the batch, and writes its output."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("embeddings_dir", type=Path)
-    parser.add_argument("--checkout", default=DEFAULT_CHECKOUT, help="BHSA/module checkout spec")
-    parser.add_argument("--n-permutations", type=int, default=2000)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--workers", type=int, default=DEFAULT_MAX_WORKERS)
-    parser.add_argument("--output", type=Path, default=None)
-    args = parser.parse_args()
+    add_embeddings_dir_argument(parser)
+    add_scoring_arguments(parser, with_seed=True, with_group_permutations=True)
+    args = parser.parse_args(argv)
 
-    api = load_api(args.checkout)
+    api = api_factory(args.checkout)
     node_values = read_node_feature_values(api)
     groups = reconstruct_groups(node_values)
     pairs = build_retrieval_pairs(groups)
 
-    cached_rows, cached_models = load_cached_rows(args.output) if args.output else ([], set())
-    if cached_models:
-        print(f"reusing {len(cached_models)} cached models from {args.output}", file=sys.stderr)
-
-    model_paths = uncached_model_paths(args.embeddings_dir, cached_models)
+    cached_rows, model_paths = resume_from_cache(args.embeddings_dir, args.output)
 
     new_rows = compare_models(
         pairs,

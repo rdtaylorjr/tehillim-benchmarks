@@ -3,6 +3,8 @@ from pathlib import Path
 import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
+import pytest
+from conftest import _write_embeddings_parquet as _write_parquet
 
 from library.embeddings import (
     dataset_identifier,
@@ -11,21 +13,7 @@ from library.embeddings import (
     load_sparse_embeddings,
     split_model_name,
 )
-
-
-def _write_parquet(path: Path, vectors: dict[int, list[float]]) -> None:
-    node_ids = sorted(vectors)
-    dim = len(vectors[node_ids[0]])
-    matrix = np.array([vectors[n] for n in node_ids], dtype="<f4")
-    table = pa.table(
-        {
-            "node_id": pa.array(node_ids, type=pa.int32()),
-            "vector": pa.FixedSizeListArray.from_arrays(
-                pa.array(matrix.flatten(), type=pa.float32()), dim
-            ),
-        }
-    )
-    pq.write_table(table, path)
+from library.errors import BenchmarkDataError
 
 
 def test_load_embeddings_reads_a_real_parquet_file(tmp_path: Path) -> None:
@@ -158,7 +146,9 @@ def test_load_sparse_embeddings_matches_a_reconstructed_dense_matrix(tmp_path: P
     node_ids, matrix = load_sparse_embeddings(path)
 
     for i, node in enumerate(node_ids):
-        np.testing.assert_allclose(matrix[i].toarray().ravel(), dense_expected[node], rtol=1e-6)
+        np.testing.assert_allclose(
+            matrix[i].toarray().ravel(), dense_expected[node], rtol=0, atol=1e-6
+        )
 
 
 def test_dataset_identifier_reads_model_and_variation_from_the_hive_path() -> None:
@@ -248,3 +238,13 @@ def test_load_embeddings_returns_float32_for_a_sparse_file(tmp_path: Path) -> No
     _write_sparse_parquet(path, {7: ([1], [1.0])}, dim=4)
 
     assert load_embeddings(path)[7].dtype == np.dtype("<f4")
+
+
+def test_dataset_identifier_rejects_a_file_that_carries_no_hive_partition() -> None:
+    with pytest.raises(BenchmarkDataError, match="no Hive partition"):
+        dataset_identifier(Path("/data/model_a.parquet"))
+
+
+def test_dataset_identifier_rejects_a_file_sitting_directly_in_the_domain_root() -> None:
+    with pytest.raises(BenchmarkDataError, match="no Hive partition"):
+        dataset_identifier(Path("/data/domain=semantic/model_a.parquet"))

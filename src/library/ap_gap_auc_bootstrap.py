@@ -20,6 +20,8 @@ Split = tuple[np.ndarray, np.ndarray]
 
 @dataclass(frozen=True, slots=True)
 class ApGapAucCI:
+    """BCa intervals for average precision, gap and AUC, with the resamples behind them."""
+
     point_ap: float
     ap_ci_low: float
     ap_ci_high: float

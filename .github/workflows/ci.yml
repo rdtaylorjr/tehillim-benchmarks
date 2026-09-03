@@ -19,7 +19,7 @@ jobs:
       - run: ruff format --check .
       - run: mypy --strict src tools
       - run: deptry src tools
-      - run: vulture src tools .vulture-whitelist.py --min-confidence 60
+      - run: vulture src tools tests .vulture-whitelist.py --min-confidence 60 --ignore-decorators "@pytest.fixture" --ignore-names "pytestmark,pytest_*,config,chunksize,a,k,exc,padding,truncation,max_length,return_tensors,normalize_embeddings"
       - run: pytest -q -m "not integration"
 
   vulnerability-scan:

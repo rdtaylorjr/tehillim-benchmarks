@@ -50,6 +50,8 @@ def read_node_feature_values(api: Any) -> dict[int, dict[str, str]]:
 
 @dataclass(frozen=True, slots=True)
 class ReconstructedGroup:
+    """One parallelism group rebuilt from BHSA's per-node annotation features."""
+
     group_range: str
     parallelism_type: str
     signature: str

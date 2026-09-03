@@ -1,14 +1,15 @@
 """Diffs two pipeline output trees, separating the expected-change ledger from real regressions."""
 
 import argparse
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pandas as pd
 
-# Columns the current change set is known to move, from the review's bit-comparison ledger.
-EXPECTED_DIFF_COLUMNS = frozenset(
+# Columns RERUN.md's documented causes move, so anything outside this ledger is a regression.
+_CI_COLUMNS = frozenset(
     {
         "ap_ci_low",
         "ap_ci_high",
@@ -29,12 +30,83 @@ EXPECTED_DIFF_COLUMNS = frozenset(
         "length_and_content_controlled_effect_size",
     }
 )
+#: Causes 4 and 12: the hypothesis set changed, so every corrected p-value moves with it.
+_Q_VALUE_COLUMNS = frozenset(
+    {
+        "q_value",
+        "q_value_by",
+        "naive_q",
+        "naive_q_by",
+        "perm_q",
+        "perm_q_by",
+        "maxT_q",
+        "maxT_q_by",
+    }
+)
+#: Causes 5 and 13: regenerated embeddings and one similarity route move rank-derived estimates.
+_POINT_ESTIMATE_PREFIXES = (
+    "average_precision",
+    "separation_auc",
+    "separation_p",
+    "discrimination_p",
+    "point_ap",
+    "point_auc",
+    "point_gap",
+    "gap",
+    "prevalence",
+    "mrr_",
+    "recall_at_",
+    "calibrated_effect_size",
+    "auc_vs_baseline",
+    "type_gap_z",
+    "mean_true_similarity",
+    "median_true_similarity",
+    "std_true_similarity",
+    "background_mean",
+    "background_std",
+    "true_effect_size",
+    "baseline_effect_size",
+    "same_genre_effect_size",
+    "different_genre_effect_size",
+)
+EXPECTED_DIFF_COLUMNS = _CI_COLUMNS | _Q_VALUE_COLUMNS
+
+#: Cause 4: draws of the order-shuffle null were scored as models and no longer are.
+_SHUFFLE_DRAW = re.compile(r"shuffle\d+$")
+#: Cause 9: the hive path refactor moved the syntax models under level=phrase.
+_RENAMED_PREFIXES = (("syntax_", "phrase_"),)
+
+
+def _explained_row_change(only_old: set[object], only_new: set[object]) -> bool:
+    """Whether every row that appeared or vanished is one a documented cause accounts for."""
+
+    def name(key: object) -> str:
+        return str(key[0] if isinstance(key, tuple) else key)
+
+    renamed_away = {
+        name(k).replace(old, new, 1)
+        for k in only_old
+        for old, new in _RENAMED_PREFIXES
+        if name(k).startswith(old)
+    }
+    unexplained_old = {
+        k
+        for k in only_old
+        if not _SHUFFLE_DRAW.search(name(k))
+        and not name(k).startswith(tuple(o for o, _ in _RENAMED_PREFIXES))
+    }
+    unexplained_new = {k for k in only_new if name(k) not in renamed_away}
+    return not unexplained_old and not unexplained_new
+
+
 _KEY_CANDIDATES = ("model", "scope", "genre", "metric", "source", "psalm_a", "psalm_b", "pair_id")
 _TOLERANCE = 0.0
 
 
 @dataclass(frozen=True)
 class ColumnDiff:
+    """One column's disagreement between an old and a new run of the same output file."""
+
     column: str
     kind: str
     n_changed: int
@@ -43,6 +115,8 @@ class ColumnDiff:
 
 @dataclass
 class TreeReport:
+    """Every disagreement found between two output trees."""
+
     files: dict[str, list[ColumnDiff]] = field(default_factory=dict)
     missing_in_new: list[str] = field(default_factory=list)
     missing_in_old: list[str] = field(default_factory=list)
@@ -57,7 +131,11 @@ class TreeReport:
 
 def classify_column(column: str) -> str:
     """Whether a differing column is one the ledger predicted or a genuine regression."""
-    return "expected" if column in EXPECTED_DIFF_COLUMNS else "unexpected"
+    if column in EXPECTED_DIFF_COLUMNS:
+        return "expected"
+    if column.startswith(_POINT_ESTIMATE_PREFIXES):
+        return "expected"
+    return "unexpected"
 
 
 def key_columns_for(frame: pd.DataFrame) -> list[str]:
@@ -79,10 +157,12 @@ def compare_frames(
     new_indexed = new.set_index(key_columns).sort_index()
 
     shared = old_indexed.index.intersection(new_indexed.index)
-    n_only_one = (len(old_indexed) - len(shared)) + (len(new_indexed) - len(shared))
+    only_old = set(old_indexed.index.difference(shared))
+    only_new = set(new_indexed.index.difference(shared))
     diffs = []
-    if n_only_one:
-        diffs.append(ColumnDiff("<rows>", "unexpected", n_only_one, float("nan")))
+    if only_old or only_new:
+        kind = "expected" if _explained_row_change(only_old, only_new) else "unexpected"
+        diffs.append(ColumnDiff("<rows>", kind, len(only_old) + len(only_new), float("nan")))
 
     old_rows, new_rows = old_indexed.loc[shared], new_indexed.loc[shared]
     for column in old_rows.columns.intersection(new_rows.columns):
@@ -134,6 +214,7 @@ def compare_trees(old_root: Path, new_root: Path) -> TreeReport:
 
 
 def main() -> None:
+    """Compares two output trees and reports every column that moved."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("old_dir", type=Path, help="outputs from before the change")
     parser.add_argument("new_dir", type=Path, help="outputs from the rerun")

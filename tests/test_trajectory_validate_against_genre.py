@@ -7,19 +7,21 @@ import pytest
 from library.multiple_comparisons import benjamini_hochberg, benjamini_yekutieli
 from trajectory.scripts.validate_against_genre import (
     _METRICS,
-    _null_gaps,
     add_fdr_columns,
     add_genre_breakdown_fdr_columns,
     breakdown_path_for,
     build_genre_breakdown_rows,
     build_validation_row,
-    observed_gap,
-    permutation_test,
     residualize_by_length,
     residualize_on_covariates,
-    same_genre_matrix,
     validate_models,
     validate_one_model,
+)
+from trajectory.validation import (
+    _null_gaps,
+    observed_gap,
+    permutation_test,
+    same_genre_matrix,
 )
 
 
@@ -645,3 +647,45 @@ def test_breakdown_path_keeps_a_non_standard_stem() -> None:
     from pathlib import Path
 
     assert breakdown_path_for(Path("out/run7.csv")) == Path("out/run7_by_genre.csv")
+
+
+def test_null_gaps_chunks_permutations_without_changing_a_single_bit() -> None:
+    """Each permutation row is independent, so chunking must be exact, not merely close."""
+    from library.blocking import rows_per_block
+    from trajectory.validation import _null_gaps
+
+    rng = np.random.default_rng(11)
+    n_pairs = 400
+    n_rows = rows_per_block(n_pairs) * 2 + 5
+    same = rng.random((n_rows, n_pairs)) < 0.3
+    same[:, 0] = True
+    distances = rng.random(n_pairs)
+
+    chunked = _null_gaps(same, distances)
+    row_by_row = np.concatenate([_null_gaps(same[i : i + 1], distances) for i in range(n_rows)])
+
+    assert np.array_equal(chunked, row_by_row)
+
+
+def test_null_gaps_peak_memory_does_not_grow_with_the_permutation_count() -> None:
+    """Casting a 10000 by 11175 boolean to float64 costs 894 MB in one allocation."""
+    import tracemalloc
+
+    from trajectory.validation import _null_gaps
+
+    rng = np.random.default_rng(12)
+    n_pairs = 2000
+    distances = rng.random(n_pairs)
+
+    def peak_for(n_rows: int) -> int:
+        same = rng.random((n_rows, n_pairs)) < 0.3
+        same[:, 0] = True
+        tracemalloc.start()
+        _null_gaps(same, distances)
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        return peak
+
+    small, large = peak_for(500), peak_for(5000)
+
+    assert large < small * 3, f"peak grew from {small} to {large} with ten times the permutations"

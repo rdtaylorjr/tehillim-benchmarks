@@ -1,8 +1,7 @@
 import os
 
-from library.parallel_models import (
+from library.worker_pool import (
     DEFAULT_MAX_WORKERS,
-    IO_BOUND_MAX_WORKERS,
     chunksize_for,
     map_in_order,
 )
@@ -68,6 +67,7 @@ def test_chunksize_is_never_zero() -> None:
     assert chunksize_for(n_items=0, max_workers=4) == 1
 
 
-def test_io_bound_worker_count_is_lower_than_the_compute_bound_default() -> None:
-    """Scoring one embedding file per item is decode-bound, where extra processes contend."""
-    assert 1 <= IO_BOUND_MAX_WORKERS < DEFAULT_MAX_WORKERS
+def test_default_worker_count_does_not_oversubscribe_the_machine() -> None:
+    """Scoring is compute-bound, so extra processes contend for the same BLAS threads."""
+    #: More processes than cores oversubscribes the BLAS threads each worker already spawns.
+    assert 1 <= DEFAULT_MAX_WORKERS <= (os.cpu_count() or 1)

@@ -136,7 +136,7 @@ def test_bootstrap_records_a_jackknife_split_that_is_too_small_as_nan() -> None:
     assert result.n_valid_jackknife == 1
 
 
-def _ci(**overrides: float | int) -> ApGapAucCI:
+def _ci(**overrides: float) -> ApGapAucCI:
     fields = dict.fromkeys(ApGapAucCI.__dataclass_fields__, 0.0)
     return ApGapAucCI(**{**fields, **overrides})  # type: ignore[arg-type]
 
@@ -185,7 +185,7 @@ _EXPECTED_CI_COLUMNS = [
 
 
 def test_ci_row_column_order_is_pinned_to_the_published_header() -> None:
-    """This order is a published CSV header, so a dataclass field reorder must fail here first."""
+    """The order is a published CSV header, so a dataclass field reorder must fail here first."""
     assert list(ci_row("m", _ci())) == _EXPECTED_CI_COLUMNS
 
 

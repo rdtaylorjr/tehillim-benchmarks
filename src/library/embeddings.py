@@ -6,6 +6,8 @@ import numpy as np
 import pyarrow.parquet as pq
 import scipy.sparse as sp
 
+from library.errors import BenchmarkDataError
+
 TEXT_VARIANTS = ("consonantal", "vocalized", "cantillation")
 
 
@@ -16,6 +18,9 @@ def dataset_identifier(path: Path) -> str:
     while "=" in node.name and not node.name.startswith("domain="):
         parts.append(node.name.split("=", 1)[1])
         node = node.parent
+    #: An unpartitioned file names no model, and a blank name would reach the output as a real row.
+    if not parts:
+        raise BenchmarkDataError(f"{path} carries no Hive partition, so it names no model")
     return "_".join(reversed(parts))
 
 

@@ -3,6 +3,8 @@
 import numba
 import numpy as np
 
+from library.errors import InsufficientDataError
+
 
 @numba.njit(cache=True)
 def _dtw_accumulated_cost_jit(cost_matrix: np.ndarray) -> np.ndarray:
@@ -25,7 +27,9 @@ def dtw_accumulated_cost(cost_matrix: np.ndarray) -> np.ndarray:
     """Sakoe-Chiba symmetric-form DP recursion over a precomputed n x m pairwise cost matrix."""
     n, m = cost_matrix.shape
     if n == 0 or m == 0:
-        raise ValueError("dtw_accumulated_cost needs at least one element in each sequence")
+        raise InsufficientDataError(
+            "dtw_accumulated_cost needs at least one element in each sequence"
+        )
     return _dtw_accumulated_cost_jit(np.ascontiguousarray(cost_matrix, dtype=np.float64))
 
 

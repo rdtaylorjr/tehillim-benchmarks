@@ -88,7 +88,7 @@ def test_sparse_cosine_similarity_matrix_raises_on_a_zero_vector() -> None:
         sparse_cosine_similarity_matrix(a, b)
 
 
-def test_sparse_cosine_similarity_matrix_matches_the_dense_function_to_float_tolerance() -> None:
+def test_sparse_cosine_similarity_matrix_matches_the_dense_function_to_float64_last_bits() -> None:
     """Proves row-normalize-then-matmul over sparse inputs gives the identical dense result."""
     rng = np.random.default_rng(0)
     dim = 500
@@ -106,7 +106,8 @@ def test_sparse_cosine_similarity_matrix_matches_the_dense_function_to_float_tol
     expected = cosine_similarity_matrix(a_dense, b_dense)
     actual = sparse_cosine_similarity_matrix(sp.csr_matrix(a_dense), sp.csr_matrix(b_dense))
 
-    np.testing.assert_allclose(actual, expected, rtol=1e-6)
+    #: Both paths accumulate in float64, measured to agree within 3.4e-16 over 20 draws.
+    np.testing.assert_allclose(actual, expected, rtol=0, atol=1e-14)
 
 
 def test_mean_reciprocal_rank_of_all_first_place_is_one() -> None:
@@ -262,8 +263,12 @@ def test_stratified_mean_gap_test_weighted_and_unweighted_differ_with_unequal_st
     diag[:n_small] += 0.5
     np.fill_diagonal(matrix, diag)
 
-    unweighted = stratified_mean_gap_test(matrix, strata, n_permutations=50, weighted=False)
-    weighted = stratified_mean_gap_test(matrix, strata, n_permutations=50, weighted=True)
+    unweighted = stratified_mean_gap_test(
+        matrix, strata, n_permutations=50, weighted=False, rng=np.random.default_rng(0)
+    )
+    weighted = stratified_mean_gap_test(
+        matrix, strata, n_permutations=50, weighted=True, rng=np.random.default_rng(0)
+    )
 
     assert unweighted.observed_gap == pytest.approx(0.25)
     assert weighted.observed_gap == pytest.approx(0.05)
@@ -289,7 +294,9 @@ def test_paired_cosine_similarity_rejects_a_zero_vector_on_the_target_side() -> 
 def test_stratified_mean_gap_test_rejects_a_single_anchor() -> None:
     """One anchor leaves no other column to average as the null, so the gap is undefined."""
     with pytest.raises(InsufficientDataError, match="at least 2"):
-        stratified_mean_gap_test(np.array([[1.0]]), np.array(["a"]), n_permutations=10)
+        stratified_mean_gap_test(
+            np.array([[1.0]]), np.array(["a"]), n_permutations=10, rng=np.random.default_rng(0)
+        )
 
 
 class TestSparsePairedCosineSimilarity:
@@ -328,3 +335,97 @@ class TestSparsePairedCosineSimilarity:
 
         with pytest.raises(DegenerateVectorError):
             sparse_paired_cosine_similarity(a, b)
+
+
+def test_cosine_similarity_matrix_accumulates_in_float64_from_float32_input() -> None:
+    """Float32 accumulation reorders exact ties, which AP and AUC then rank differently."""
+    rng = np.random.default_rng(0)
+    vectors = rng.standard_normal((64, 128)).astype(np.float32)
+
+    result = cosine_similarity_matrix(vectors, vectors)
+
+    exact = vectors.astype(np.float64)
+    exact = exact / np.linalg.norm(exact, axis=1, keepdims=True)
+    float32_result = (vectors / np.linalg.norm(vectors, axis=1, keepdims=True)) @ (
+        vectors / np.linalg.norm(vectors, axis=1, keepdims=True)
+    ).T
+
+    assert result.dtype == np.float64
+    #: Matches the float64 reference far closer than float32 could, which is the point of the cast.
+    assert np.allclose(result, exact @ exact.T, rtol=0, atol=1e-14)
+    assert np.abs(result - float32_result).max() > 1e-9
+
+
+def test_paired_cosine_similarity_accumulates_in_float64_from_float32_input() -> None:
+    rng = np.random.default_rng(1)
+    a = rng.standard_normal((32, 96)).astype(np.float32)
+    b = rng.standard_normal((32, 96)).astype(np.float32)
+
+    result = paired_cosine_similarity(a, b)
+
+    ea, eb = a.astype(np.float64), b.astype(np.float64)
+    ea = ea / np.linalg.norm(ea, axis=1, keepdims=True)
+    eb = eb / np.linalg.norm(eb, axis=1, keepdims=True)
+    assert result.dtype == np.float64
+    assert np.array_equal(result, np.sum(ea * eb, axis=1))
+
+
+def test_sparse_cosine_similarity_matrix_accumulates_in_float64() -> None:
+    rng = np.random.default_rng(2)
+    dense = (rng.standard_normal((24, 64)) * (rng.random((24, 64)) < 0.3)).astype(np.float32)
+    dense[dense.sum(axis=1) == 0, 0] = 1.0
+    sparse = sp.csr_matrix(dense)
+
+    result = sparse_cosine_similarity_matrix(sparse, sparse)
+
+    exact = dense.astype(np.float64)
+    exact = exact / np.linalg.norm(exact, axis=1, keepdims=True)
+    assert result.dtype == np.float64
+    assert np.allclose(result, exact @ exact.T, rtol=0, atol=1e-12)
+
+
+def test_paired_cosine_similarity_blocks_without_changing_a_single_bit() -> None:
+    """Rows are independent, so blocking must be exact, not merely close."""
+    rng = np.random.default_rng(7)
+    a = rng.standard_normal((5000, 64)).astype(np.float32)
+    b = rng.standard_normal((5000, 64)).astype(np.float32)
+
+    ea, eb = a.astype(np.float64), b.astype(np.float64)
+    unblocked = np.sum(
+        (ea / np.linalg.norm(ea, axis=1, keepdims=True))
+        * (eb / np.linalg.norm(eb, axis=1, keepdims=True)),
+        axis=1,
+    )
+
+    assert np.array_equal(paired_cosine_similarity(a, b), unblocked)
+
+
+def test_paired_cosine_similarity_peak_memory_does_not_grow_with_the_input() -> None:
+    """Casting the whole stack to float64 is what exhausted memory, so peak must track the block."""
+    import tracemalloc
+
+    def peak_for(rows: int) -> int:
+        rng = np.random.default_rng(8)
+        a = rng.standard_normal((rows, 256)).astype(np.float32)
+        b = rng.standard_normal((rows, 256)).astype(np.float32)
+        tracemalloc.start()
+        paired_cosine_similarity(a, b)
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        return peak
+
+    small, large = peak_for(5_000), peak_for(40_000)
+
+    #: Eight times the rows must not cost eight times the memory: the block caps it.
+    assert large < small * 2, f"peak grew from {small} to {large} with the input"
+
+
+def test_discrimination_reports_no_effect_when_every_difference_is_zero() -> None:
+    """Identical true and null similarities leave nothing to rank, so nothing is significant."""
+    identical = np.array([0.5, 0.6, 0.7])
+
+    result = paired_discrimination_test(identical, identical)
+
+    assert result.p_value == 1.0
+    assert result.statistic == 0.0
+    assert result.rank_biserial == 0.0

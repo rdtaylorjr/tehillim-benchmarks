@@ -36,6 +36,7 @@ def _call_with_timeout(
     result: queue.Queue[Any] = queue.Queue(maxsize=1)
 
     def _run() -> None:
+        """Calls a Text-Fabric entry point and reports failure as None rather than an exception."""
         try:
             result.put(fn(*args, **kwargs))
         except Exception:  # noqa: BLE001 -- any failure means the call did not produce an api

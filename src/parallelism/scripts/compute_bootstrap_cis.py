@@ -1,30 +1,30 @@
 """Psalm-clustered BCa bootstrap 95% CIs for AP (primary), gap, and AUC, every model x scope."""
 
 import argparse
-import sys
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 from library.ap_gap_auc_bootstrap import ci_row
 from library.bhsa import (
-    DEFAULT_CHECKOUT,
     list_psalms_half_verse_nodes,
     list_psalms_half_verses_by_psalm,
     node_to_psalm_map,
 )
 from library.calibration import background_similarity_stats, background_similarity_stats_sparse
+from library.cli import add_embeddings_dir_argument, add_scoring_arguments, resume_from_cache
 from library.embeddings import (
     dataset_identifier,
     is_sparse_embeddings,
     load_embeddings,
     load_sparse_embeddings,
 )
-from library.incremental_cache import load_cached_rows
-from library.model_files import uncached_model_paths
-from library.parallel_models import DEFAULT_MAX_WORKERS, map_in_order
 from library.rows_output import write_rows_csv
+from library.scoring import skipping_unscorable
+from library.worker_pool import map_in_order
 from parallelism.baseline import build_unmarked_half_verse_pairs
 from parallelism.bootstrap import (
     block_bootstrap_ap_gap_and_auc,
@@ -65,6 +65,9 @@ def score_model(
         baseline_sims = pair_similarities_sparse(model_baseline_pairs, node_ids, matrix)
         for scope_name, true_pairs in scopes.items():
             model_true_pairs = filter_node_pairs_with_vectors(true_pairs, node_index)
+            #: A type this corpus never annotates is an absent scope, not a model that failed.
+            if not model_true_pairs:
+                continue
             result = block_bootstrap_ap_gap_and_auc_from_similarities(
                 model_true_pairs,
                 model_baseline_pairs,
@@ -83,8 +86,12 @@ def score_model(
     background = background_similarity_stats(background_vecs)
     model_baseline_pairs = filter_node_pairs_with_vectors(baseline_pairs, node_vectors)
     for scope_name, true_pairs in scopes.items():
+        model_true_pairs = filter_node_pairs_with_vectors(true_pairs, node_vectors)
+        #: A type this corpus never annotates is an absent scope, not a model that failed.
+        if not model_true_pairs:
+            continue
         result = block_bootstrap_ap_gap_and_auc(
-            filter_node_pairs_with_vectors(true_pairs, node_vectors),
+            model_true_pairs,
             model_baseline_pairs,
             node_vectors,
             background,
@@ -96,17 +103,18 @@ def score_model(
     return rows
 
 
-def main() -> None:
+def main(
+    argv: list[str] | None = None,
+    *,
+    api_factory: Callable[[str], Any] = load_api,
+) -> None:
+    """Parses the arguments this module documents, runs the batch, and writes its output."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("embeddings_dir", type=Path)
-    parser.add_argument("--checkout", default=DEFAULT_CHECKOUT, help="BHSA/module checkout spec")
-    parser.add_argument("--n-resamples", type=int, default=1000)
-    parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--workers", type=int, default=DEFAULT_MAX_WORKERS)
-    parser.add_argument("--output", type=Path, default=None)
-    args = parser.parse_args()
+    add_embeddings_dir_argument(parser)
+    add_scoring_arguments(parser, with_seed=True, with_resamples=True)
+    args = parser.parse_args(argv)
 
-    api = load_api(args.checkout)
+    api = api_factory(args.checkout)
     node_values = read_node_feature_values(api)
     groups = reconstruct_groups(node_values)
     all_pairs = build_retrieval_pairs(groups)
@@ -127,11 +135,7 @@ def main() -> None:
             filter_pairs_by_type(all_pairs, frozenset({ptype}))
         )
 
-    rows, cached_models = load_cached_rows(args.output) if args.output else ([], set())
-    if cached_models:
-        print(f"reusing {len(cached_models)} cached models from {args.output}", file=sys.stderr)
-
-    model_paths = uncached_model_paths(args.embeddings_dir, cached_models)
+    rows, model_paths = resume_from_cache(args.embeddings_dir, args.output)
     score = partial(
         score_model,
         scopes=scopes,
@@ -141,7 +145,9 @@ def main() -> None:
         n_resamples=args.n_resamples,
         seed=args.seed,
     )
-    for model_rows in map_in_order(score, model_paths, args.workers):
+    for model_rows in map_in_order(skipping_unscorable(score), model_paths, args.workers):
+        if model_rows is None:
+            continue
         rows.extend(model_rows)
 
     for row in rows:

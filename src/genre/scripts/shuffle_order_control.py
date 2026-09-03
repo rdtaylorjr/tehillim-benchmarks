@@ -2,18 +2,22 @@
 
 import argparse
 import csv
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
 from genre.evaluate import evaluate_genre_discrimination
 from genre.genre_labels import load_genre_by_psalm
 from genre.pairs import GenrePair, build_genre_pairs, filter_pairs_by_genre
-from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verses_by_psalm, load_bhsa_api
-from library.order_shuffle import DEFAULT_N_SHUFFLES, order_shuffle_result
-from library.parallel_models import IO_BOUND_MAX_WORKERS, map_in_order
+from library.bhsa import list_psalms_half_verses_by_psalm, load_bhsa_api
+from library.cli import add_genre_csv_argument, add_scoring_arguments
+from library.order_shuffle import order_shuffle_result
 from library.psalm_vectors import load_psalm_vectors
+from library.shuffle_draws import select_shuffle_draws
+from library.worker_pool import map_in_order
 
 
 def score_genre_ap(
@@ -42,29 +46,27 @@ def shuffled_scores_by_genre(
     }
 
 
-def main() -> None:
+def main(
+    argv: list[str] | None = None,
+    *,
+    api_factory: Callable[[str], Any] = load_bhsa_api,
+) -> None:
+    """Parses the arguments this module documents, runs the batch, and writes its output."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "genre_csv",
-        type=Path,
-        help="third-party genre CSV, e.g. psalms-browser.csv (not in this repo)",
-    )
+    add_genre_csv_argument(parser)
     parser.add_argument("real_embeddings", type=Path)
     parser.add_argument("shuffled_embeddings_dir", type=Path)
-    parser.add_argument("--checkout", default=DEFAULT_CHECKOUT, help="BHSA checkout spec")
-    parser.add_argument("--n-shuffles", type=int, default=DEFAULT_N_SHUFFLES)
-    parser.add_argument("--workers", type=int, default=IO_BOUND_MAX_WORKERS)
-    parser.add_argument("--output", type=Path, default=None)
-    args = parser.parse_args()
+    add_scoring_arguments(parser, with_shuffles=True)
+    args = parser.parse_args(argv)
 
-    api = load_bhsa_api(args.checkout)
+    api = api_factory(args.checkout)
     half_verses_by_psalm = list_psalms_half_verses_by_psalm(api)
     genre_by_psalm = load_genre_by_psalm(args.genre_csv)
     pairs = build_genre_pairs(genre_by_psalm)
     genres = sorted(set(genre_by_psalm.values()))
 
     real_ap = score_genre_ap(args.real_embeddings, half_verses_by_psalm, pairs, genres)
-    shuffled_paths = sorted(args.shuffled_embeddings_dir.glob("**/*.parquet"))[: args.n_shuffles]
+    shuffled_paths = select_shuffle_draws(args.shuffled_embeddings_dir, args.n_shuffles)
     score = partial(
         score_genre_ap, half_verses_by_psalm=half_verses_by_psalm, pairs=pairs, genres=genres
     )

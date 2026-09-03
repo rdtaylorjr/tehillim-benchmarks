@@ -13,6 +13,8 @@ _MIN_VECTORS_FOR_BACKGROUND = 2
 
 @dataclass(frozen=True, slots=True)
 class BackgroundStats:
+    """Mean and spread of a model's background similarity, the scale effect sizes divide by."""
+
     mean: float
     std: float
     n_vectors: int

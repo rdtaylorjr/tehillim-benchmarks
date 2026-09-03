@@ -1,21 +1,14 @@
 """Per-genre one-vs-rest permutation test for a trajectory distance metric, joint maxT."""
 
-from dataclasses import dataclass
-
 import numpy as np
 
 from genre.permutation import one_vs_rest_masks
-
-
-@dataclass(frozen=True, slots=True)
-class GenreBreakdownResult:
-    """Per-genre one-vs-rest distance gap, permutation p, and maxT-corrected p, for one source."""
-
-    genres: tuple[str, ...]
-    gap_observed: tuple[float, ...]
-    p_perm: tuple[float, ...]
-    p_maxT: tuple[float, ...]  # noqa: N815 -- Westfall-Young maxT term
-    n_permutations: int
+from library.permutation_test import (
+    GroupPermutationResult,
+    maxt_p_values,
+    permuted_label_batches,
+)
+from library.protocol import DEFAULT_N_GROUP_PERMUTATIONS
 
 
 def _one_vs_rest_gap(distances: np.ndarray, same: np.ndarray, population: np.ndarray) -> float:
@@ -79,11 +72,11 @@ def joint_genre_breakdown_permutation_test(
     idx_b: np.ndarray,
     genre_codes: np.ndarray,
     genres: tuple[str, ...],
-    n_permutations: int = 2000,
-    rng: np.random.Generator | None = None,
-) -> GenreBreakdownResult:
+    n_permutations: int = DEFAULT_N_GROUP_PERMUTATIONS,
+    *,
+    rng: np.random.Generator,
+) -> GroupPermutationResult:
     """One-sided permutation p per genre's one-vs-rest distance gap, plus a Westfall-Young maxT."""
-    rng = rng if rng is not None else np.random.default_rng()
     n_genres = len(genres)
     n = len(genre_codes)
 
@@ -100,14 +93,11 @@ def joint_genre_breakdown_permutation_test(
     total_sum = float(distances.sum())
     total_count = float(len(distances))
 
-    tiled_codes = np.tile(genre_codes, (n_permutations, 1))
-    permuted_codes = rng.permuted(tiled_codes, axis=1)
-
+    permuted_codes = permuted_label_batches(genre_codes, n_permutations, rng)
     null_gap = np.full((n_permutations, n_genres), np.nan)
     for g in range(n_genres):
-        is_target_batch = permuted_codes == g
         null_gap[:, g] = _batched_one_vs_rest_gap(
-            is_target_batch,
+            permuted_codes == g,
             distance_matrix,
             mask_matrix,
             distance_colsum,
@@ -115,23 +105,12 @@ def joint_genre_breakdown_permutation_test(
             total_sum,
             total_count,
         )
+    permutation = maxt_p_values(gap_observed, null_gap)
 
-    max_null_gap = np.nanmax(null_gap, axis=1)
-
-    p_perm = np.full(n_genres, np.nan)
-    p_maxT = np.full(n_genres, np.nan)  # noqa: N806 -- Westfall-Young maxT term
-    for g in range(n_genres):
-        valid = ~np.isnan(null_gap[:, g])
-        p_perm[g] = (np.sum(null_gap[valid, g] >= gap_observed[g]) + 1) / (int(np.sum(valid)) + 1)
-        valid_max = ~np.isnan(max_null_gap)
-        p_maxT[g] = (np.sum(max_null_gap[valid_max] >= gap_observed[g]) + 1) / (
-            int(np.sum(valid_max)) + 1
-        )
-
-    return GenreBreakdownResult(
+    return GroupPermutationResult(
         genres=genres,
-        gap_observed=tuple(gap_observed.tolist()),
-        p_perm=tuple(p_perm.tolist()),
-        p_maxT=tuple(p_maxT.tolist()),
+        observed=tuple(gap_observed.tolist()),
+        p_perm=tuple(permutation.p_per_group.tolist()),
+        p_maxt=tuple(permutation.p_maxt.tolist()),
         n_permutations=n_permutations,
     )

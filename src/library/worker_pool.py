@@ -1,15 +1,12 @@
 """Runs an independent per-item job across worker processes, preserving submission order."""
 
+# Named for the pool: "parallelism" here is the Hebrew poetic kind, benchmarked in src/parallelism.
+
 from collections.abc import Callable, Sequence
 from concurrent.futures import ProcessPoolExecutor
-from typing import TypeVar
 
-ItemT = TypeVar("ItemT")
-ResultT = TypeVar("ResultT")
-
-DEFAULT_MAX_WORKERS = 4
-# Parquet decode is already threaded by pyarrow, so throughput peaks at two processes.
-IO_BOUND_MAX_WORKERS = 2
+# Measured over one shuffle family of 100 draws: 55s at 2 workers, 50s at 3, 65s at 5.
+DEFAULT_MAX_WORKERS = 3
 
 
 def chunksize_for(n_items: int, max_workers: int) -> int:
@@ -17,7 +14,7 @@ def chunksize_for(n_items: int, max_workers: int) -> int:
     return max(1, n_items // (max_workers * 4))
 
 
-def map_in_order(
+def map_in_order[ItemT, ResultT](
     fn: Callable[[ItemT], ResultT],
     items: Sequence[ItemT],
     max_workers: int = DEFAULT_MAX_WORKERS,

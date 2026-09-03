@@ -1,29 +1,30 @@
 """Ranks embedding files by true-pair similarity calibrated against each model's own background."""
 
 import argparse
-import sys
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
-from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verse_nodes
+from library.bhsa import list_psalms_half_verse_nodes
 from library.calibration import (
     background_similarity_stats,
     background_similarity_stats_sparse,
     calibrated_effect_size,
 )
+from library.cli import add_embeddings_dir_argument, add_scoring_arguments, resume_from_cache
 from library.embeddings import (
     dataset_identifier,
     is_sparse_embeddings,
     load_embeddings,
     load_sparse_embeddings,
 )
-from library.incremental_cache import load_cached_rows
-from library.model_files import uncached_model_paths
-from library.parallel_models import DEFAULT_MAX_WORKERS, map_in_order
 from library.retrieval_metrics import paired_cosine_similarity, sparse_paired_cosine_similarity
 from library.rows_output import write_rows_csv
+from library.scoring import skipping_unscorable
+from library.worker_pool import DEFAULT_MAX_WORKERS, map_in_order
 from parallelism.evaluate import build_side_vectors, build_side_vectors_sparse
 from parallelism.pairs import RetrievalPair, build_retrieval_pairs, filter_pairs_with_vectors
 from parallelism.tf_features import load_api, read_node_feature_values, reconstruct_groups
@@ -92,20 +93,24 @@ def compare_true_similarity(
 ) -> list[dict[str, str | int | float]]:
     """Scores every model file across workers, rows sorted by calibrated effect size descending."""
     score = partial(score_model, pairs=pairs, background_node_ids=background_node_ids)
-    rows = map_in_order(score, model_paths, max_workers)
+    scored = map_in_order(skipping_unscorable(score), model_paths, max_workers)
+    rows = [row for row in scored if row is not None]
     rows.sort(key=lambda r: r["calibrated_effect_size"], reverse=True)
     return rows
 
 
-def main() -> None:
+def main(
+    argv: list[str] | None = None,
+    *,
+    api_factory: Callable[[str], Any] = load_api,
+) -> None:
+    """Parses the arguments this module documents, runs the batch, and writes its output."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("embeddings_dir", type=Path)
-    parser.add_argument("--checkout", default=DEFAULT_CHECKOUT, help="BHSA/module checkout spec")
-    parser.add_argument("--workers", type=int, default=DEFAULT_MAX_WORKERS)
-    parser.add_argument("--output", type=Path, default=None)
-    args = parser.parse_args()
+    add_embeddings_dir_argument(parser)
+    add_scoring_arguments(parser)
+    args = parser.parse_args(argv)
 
-    api = load_api(args.checkout)
+    api = api_factory(args.checkout)
     node_values = read_node_feature_values(api)
     groups = reconstruct_groups(node_values)
     pairs = build_retrieval_pairs(groups)
@@ -114,11 +119,7 @@ def main() -> None:
     }
     background_node_ids = [n for n in list_psalms_half_verse_nodes(api) if n not in marked_nodes]
 
-    cached_rows, cached_models = load_cached_rows(args.output) if args.output else ([], set())
-    if cached_models:
-        print(f"reusing {len(cached_models)} cached models from {args.output}", file=sys.stderr)
-
-    model_paths = uncached_model_paths(args.embeddings_dir, cached_models)
+    cached_rows, model_paths = resume_from_cache(args.embeddings_dir, args.output)
     new_rows = compare_true_similarity(
         pairs, model_paths, background_node_ids, max_workers=args.workers
     )

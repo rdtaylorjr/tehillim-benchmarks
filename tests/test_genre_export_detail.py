@@ -1,3 +1,4 @@
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -6,6 +7,8 @@ import pytest
 from genre.pairs import GenrePair, build_genre_pairs
 from genre.scripts.export_detail import build_pair_detail_rows, build_summary_rows, score_model
 from library.calibration import BackgroundStats
+from library.errors import BenchmarkDataError
+from library.scoring import skipping_unscorable
 
 
 def _pairs_and_vectors() -> tuple[list[GenrePair], dict[int, np.ndarray]]:
@@ -81,7 +84,7 @@ def test_score_model_returns_pair_and_summary_rows_for_one_file(
     assert summary_rows[0]["model"] == "mine"
 
 
-def test_score_model_skips_a_model_whose_background_has_no_variance(
+def test_score_model_raises_and_the_shared_policy_skips_it(
     tmp_path: Path, write_embeddings_parquet
 ) -> None:
     """Identical psalm vectors give a zero-variance background, which cannot be calibrated."""
@@ -91,4 +94,8 @@ def test_score_model_skips_a_model_whose_background_has_no_variance(
     )
     pairs = build_genre_pairs({1: "A", 2: "A", 3: "B", 4: "B"})
 
-    assert score_model(path, {p: [p] for p in (1, 2, 3, 4)}, pairs) == ([], [])
+    score = partial(score_model, half_verses_by_psalm={p: [p] for p in (1, 2, 3, 4)}, pairs=pairs)
+
+    with pytest.raises(BenchmarkDataError):
+        score(path)
+    assert skipping_unscorable(score)(path) is None

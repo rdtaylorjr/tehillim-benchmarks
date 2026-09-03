@@ -6,6 +6,7 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
+from conftest import _write_sparse_embeddings_parquet
 
 from parallelism.node_pairs import as_node_pairs, retrieval_pairs_as_node_pairs
 from parallelism.pairs import RetrievalPair
@@ -23,6 +24,7 @@ def _vectors() -> dict[int, np.ndarray]:
 def write_dense(path: Path, vectors: dict[int, np.ndarray]) -> None:
     """Writes the dense embeddings layout."""
     nodes = sorted(vectors)
+    path.parent.mkdir(parents=True, exist_ok=True)
     matrix = np.array([vectors[n] for n in nodes], dtype="<f4")
     table = pa.table(
         {
@@ -35,31 +37,15 @@ def write_dense(path: Path, vectors: dict[int, np.ndarray]) -> None:
     pq.write_table(table, path)
 
 
-def write_sparse(path: Path, vectors: dict[int, np.ndarray]) -> None:
-    """Writes the same values in the sparse layout the loader dispatches on."""
-    nodes = sorted(vectors)
-    rows = [np.asarray(vectors[n], dtype="<f4") for n in nodes]
-    table = pa.table(
-        {
-            "node_id": pa.array(nodes, type=pa.int32()),
-            "indices": pa.array(
-                [np.flatnonzero(r).astype("<i4").tolist() for r in rows], type=pa.list_(pa.int32())
-            ),
-            "values": pa.array(
-                [r[np.flatnonzero(r)].tolist() for r in rows], type=pa.list_(pa.float32())
-            ),
-        }
-    )
-    pq.write_table(table.replace_schema_metadata({"dim": str(DIM), "sparse": "true"}), path)
-
-
 @pytest.fixture
 def both_files(tmp_path: Path) -> tuple[Path, Path]:
     """The same vectors written once densely and once sparsely."""
     vectors = _vectors()
-    dense, sparse = tmp_path / "dense.parquet", tmp_path / "sparse.parquet"
+    #: Both layouts sit under a Hive partition, the only shape a batch run ever names a model from.
+    dense = tmp_path / "domain=semantic/model=dense/vectors.parquet"
+    sparse = tmp_path / "domain=semantic/model=sparse/vectors.parquet"
     write_dense(dense, vectors)
-    write_sparse(sparse, vectors)
+    _write_sparse_embeddings_parquet(sparse, vectors)
     return dense, sparse
 
 

@@ -12,6 +12,8 @@ _MIN_PAIRS_FOR_SEPARATION = 2
 
 @dataclass(frozen=True, slots=True)
 class SeparationResult:
+    """AUC separating two score populations, with the counts it was computed from."""
+
     auc: float
     p_value: float
     n_positive: int

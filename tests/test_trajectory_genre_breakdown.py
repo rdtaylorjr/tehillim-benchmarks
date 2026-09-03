@@ -150,7 +150,7 @@ def test_joint_permutation_p_is_small_for_strong_genre_clustering() -> None:
     )
 
     assert all(p < 0.05 for p in result.p_perm)
-    assert all(p < 0.05 for p in result.p_maxT)
+    assert all(p < 0.05 for p in result.p_maxt)
 
 
 def test_permutation_p_is_large_when_labels_are_unrelated_to_distance() -> None:
@@ -177,8 +177,8 @@ def test_p_values_never_zero_and_maxt_at_least_p_perm() -> None:
     )
 
     assert all(p > 0.0 for p in result.p_perm)
-    assert all(p > 0.0 for p in result.p_maxT)
-    for p_perm, p_maxt in zip(result.p_perm, result.p_maxT, strict=True):
+    assert all(p > 0.0 for p in result.p_maxt)
+    for p_perm, p_maxt in zip(result.p_perm, result.p_maxt, strict=True):
         assert p_maxt >= p_perm
 
 
@@ -193,7 +193,7 @@ def test_same_seed_reproduces_identical_results() -> None:
     )
 
     assert result_a.p_perm == result_b.p_perm
-    assert result_a.p_maxT == result_b.p_maxT
+    assert result_a.p_maxt == result_b.p_maxt
 
 
 def test_observed_gap_matches_hand_built_fixture_through_the_full_function() -> None:
@@ -209,4 +209,4 @@ def test_observed_gap_matches_hand_built_fixture_through_the_full_function() -> 
         rng=np.random.default_rng(5),
     )
 
-    assert result.gap_observed == (5.5, 4.5)
+    assert result.observed == (5.5, 4.5)

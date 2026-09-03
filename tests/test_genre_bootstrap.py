@@ -113,7 +113,12 @@ def test_block_bootstrap_raises_a_clear_error_with_only_one_psalm() -> None:
 
     with pytest.raises(ValueError, match="no genre pairs"):
         block_bootstrap_genre_ap_gap_and_auc(
-            [1], similarity_matrix, genre_match_matrix, background, n_resamples=20
+            [1],
+            similarity_matrix,
+            genre_match_matrix,
+            background,
+            n_resamples=20,
+            rng=np.random.default_rng(0),
         )
 
 

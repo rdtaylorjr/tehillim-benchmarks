@@ -6,6 +6,8 @@ from itertools import combinations
 
 @dataclass(frozen=True, slots=True)
 class GenrePair:
+    """Two psalms compared for genre discrimination, and whether they share a genre."""
+
     psalm_a: int
     psalm_b: int
     genre_a: str

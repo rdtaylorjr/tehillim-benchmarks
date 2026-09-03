@@ -2,16 +2,18 @@
 
 import argparse
 import json
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import scipy.sparse as sp
 
-from library.bhsa import DEFAULT_CHECKOUT
+from library.cli import add_scoring_arguments
 from library.embeddings import is_sparse_embeddings, load_embeddings, load_sparse_embeddings
-from library.errors import InsufficientDataError
+from library.errors import BenchmarkDataError, InsufficientDataError
+from library.protocol import DEFAULT_N_PERMUTATIONS
 from library.retrieval_metrics import (
     DiscriminationResult,
     PermutationResult,
@@ -60,7 +62,9 @@ def build_side_vectors(
     if missing:
         shown = missing[:_MISSING_NODES_SHOWN]
         suffix = "..." if len(missing) > _MISSING_NODES_SHOWN else ""
-        raise ValueError(f"embedding file is missing {len(missing)} node id(s): {shown}{suffix}")
+        raise BenchmarkDataError(
+            f"embedding file is missing {len(missing)} node id(s): {shown}{suffix}"
+        )
     counts = _span_lengths(node_lists)
     flat_vectors = np.stack([node_vectors[n] for nodes in node_lists for n in nodes])
     # A segmented reduction over the same elements in the same order as scatter-add, 5x faster.
@@ -82,7 +86,9 @@ def build_side_vectors_sparse(
     if missing:
         shown = missing[:_MISSING_NODES_SHOWN]
         suffix = "..." if len(missing) > _MISSING_NODES_SHOWN else ""
-        raise ValueError(f"embedding file is missing {len(missing)} node id(s): {shown}{suffix}")
+        raise BenchmarkDataError(
+            f"embedding file is missing {len(missing)} node id(s): {shown}{suffix}"
+        )
     row_lengths = _span_lengths(node_lists)
     group_ids = np.repeat(np.arange(len(node_lists)), row_lengths)
     flat_cols = np.array([node_index[n] for nodes in node_lists for n in nodes])
@@ -95,6 +101,8 @@ def build_side_vectors_sparse(
 
 @dataclass
 class TypeReport:
+    """One parallelism type's retrieval and separation scores for a single model."""
+
     parallelism_type: str
     n_pairs: int
     separation: SeparationResult
@@ -109,6 +117,8 @@ class TypeReport:
 
 @dataclass
 class EvaluationReport:
+    """One model's parallelism scores overall and broken down by parallelism type."""
+
     n_pairs: int
     separation: SeparationResult
     discrimination: DiscriminationResult
@@ -138,6 +148,8 @@ def _report_from_pair_similarities(
     )
 
     n = len(pair_ids)
+    if n < 2:
+        raise InsufficientDataError("retrieval scoring needs at least two retrieval pairs")
     true_similarities = np.diag(similarities)
     off_diagonal_by_row = similarities[~np.eye(n, dtype=bool)].reshape(n, n - 1)
     null_similarities = off_diagonal_by_row.mean(axis=1)
@@ -189,11 +201,11 @@ def _report_from_pair_similarities(
 def run_evaluation(
     pairs: list[RetrievalPair],
     node_vectors: dict[int, np.ndarray],
-    n_permutations: int = 10000,
-    rng: np.random.Generator | None = None,
+    n_permutations: int = DEFAULT_N_PERMUTATIONS,
+    *,
+    rng: np.random.Generator,
 ) -> EvaluationReport:
     """Runs bidirectional retrieval, discrimination, and type-stratified tests for one model."""
-    rng = rng if rng is not None else np.random.default_rng()
     source_vecs = build_side_vectors(pairs, "source", node_vectors)
     target_vecs = build_side_vectors(pairs, "target", node_vectors)
     similarities = cosine_similarity_matrix(source_vecs, target_vecs)
@@ -204,11 +216,11 @@ def run_evaluation_sparse(
     pairs: list[RetrievalPair],
     node_ids: list[int],
     node_vectors: sp.csr_matrix,
-    n_permutations: int = 10000,
-    rng: np.random.Generator | None = None,
+    n_permutations: int = DEFAULT_N_PERMUTATIONS,
+    *,
+    rng: np.random.Generator,
 ) -> EvaluationReport:
     """Same report as run_evaluation, pooling and comparing sparse vectors without densifying."""
-    rng = rng if rng is not None else np.random.default_rng()
     source_vecs = build_side_vectors_sparse(pairs, "source", node_ids, node_vectors)
     target_vecs = build_side_vectors_sparse(pairs, "target", node_ids, node_vectors)
     similarities = sparse_cosine_similarity_matrix(source_vecs, target_vecs)
@@ -233,15 +245,18 @@ def score_embedding_file(
     return usable, run_evaluation(usable, node_vectors, n_permutations=n_permutations, rng=rng)
 
 
-def main() -> None:
+def main(
+    argv: list[str] | None = None,
+    *,
+    api_factory: Callable[[str], Any] = load_api,
+) -> None:
+    """Parses the arguments this module documents, runs the batch, and writes its output."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("embedding_file", type=Path, help="a tehillim-embeddings Parquet file")
-    parser.add_argument("--checkout", default=DEFAULT_CHECKOUT, help="BHSA/module checkout spec")
-    parser.add_argument("--n-permutations", type=int, default=10000)
-    parser.add_argument("--seed", type=int, default=0)
-    args = parser.parse_args()
+    add_scoring_arguments(parser, with_permutations=True, with_seed=True)
+    args = parser.parse_args(argv)
 
-    api = load_api(args.checkout)
+    api = api_factory(args.checkout)
     node_values = read_node_feature_values(api)
     groups = reconstruct_groups(node_values)
     pairs = build_retrieval_pairs(groups)

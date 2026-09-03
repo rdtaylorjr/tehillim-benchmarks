@@ -1,7 +1,7 @@
 """Exports row-per-observation detail: pair/baseline similarity and per-type vs-baseline stats."""
 
 import argparse
-import sys
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
 from typing import Any
@@ -11,7 +11,6 @@ import pandas as pd
 import scipy.sparse as sp
 
 from library.bhsa import (
-    DEFAULT_CHECKOUT,
     list_psalms_half_verse_nodes,
     list_psalms_half_verses_by_psalm,
 )
@@ -21,6 +20,7 @@ from library.calibration import (
     background_similarity_stats_sparse,
     calibrated_z_score,
 )
+from library.cli import add_embeddings_dir_argument, add_scoring_arguments, report_reuse
 from library.embeddings import (
     dataset_identifier,
     is_sparse_embeddings,
@@ -29,7 +29,6 @@ from library.embeddings import (
 )
 from library.incremental_cache import load_cached_parquet_set
 from library.model_files import uncached_model_paths
-from library.parallel_models import DEFAULT_MAX_WORKERS, map_in_order
 from library.retrieval_metrics import (
     cosine_similarity_matrix,
     paired_cosine_similarity,
@@ -38,7 +37,15 @@ from library.retrieval_metrics import (
     sparse_paired_cosine_similarity,
 )
 from library.rows_output import write_dataframe_parquet
+from library.scoring import skipping_unscorable
+from library.worker_pool import map_in_order
 from parallelism.baseline import build_unmarked_half_verse_pairs
+from parallelism.baseline_comparison import (
+    BaselineComparison,
+    baseline_metric_fields,
+    compare_to_baseline,
+    compare_to_baseline_from_similarities,
+)
 from parallelism.evaluate import build_side_vectors, build_side_vectors_sparse
 from parallelism.node_pairs import (
     NodePairs,
@@ -53,20 +60,10 @@ from parallelism.pairs import (
     filter_pairs_by_type,
     filter_pairs_with_vectors,
 )
-from parallelism.scripts.compare_baseline import (
-    BaselineComparison,
-    compare_to_baseline,
-    compare_to_baseline_from_similarities,
-)
 from parallelism.tf_features import load_api, read_node_feature_values, reconstruct_groups
 
 _TYPES = frozenset({"Synonymous", "Staircase", "Emblematic", "Synthetic", "Antithetic"})
 _OUTPUT_FILES = ("pair_detail.parquet", "baseline_detail.parquet", "type_vs_baseline.parquet")
-
-
-def load_cached_detail(output_dir: Path) -> tuple[list[list[dict[str, Any]]], set[str]]:
-    """Reads prior detail parquet files' rows and the model set already covered by all three."""
-    return load_cached_parquet_set(output_dir, _OUTPUT_FILES)
 
 
 def build_pair_detail_rows(
@@ -206,17 +203,12 @@ def _baseline_detail_rows_from_similarities(
 def _scope_row(
     model: str, scope: str, scope_kind: str, result: BaselineComparison
 ) -> dict[str, str | int | float]:
+    """One detail row for a model within one scope, overall or a single parallelism type."""
     return {
         "model": model,
         "scope": scope,
         "scope_kind": scope_kind,
-        "n_true": result.n_true,
-        "n_baseline": result.n_baseline,
-        "prevalence": result.prevalence,
-        "average_precision": result.average_precision,
-        "true_effect_size": result.true_effect_size,
-        "baseline_effect_size": result.baseline_effect_size,
-        "gap": result.true_effect_size - result.baseline_effect_size,
+        **baseline_metric_fields(result),
         "auc_vs_baseline": result.separation_auc,
         "p_vs_baseline": result.separation_p,
     }
@@ -326,16 +318,20 @@ def score_model(
     )
 
 
-def main() -> None:
+def main(
+    argv: list[str] | None = None,
+    *,
+    api_factory: Callable[[str], Any] = load_api,
+) -> None:
+    """Parses the arguments this module documents, runs the batch, and writes its output."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("embeddings_dir", type=Path)
-    parser.add_argument("--checkout", default=DEFAULT_CHECKOUT, help="BHSA/module checkout spec")
-    parser.add_argument("--workers", type=int, default=DEFAULT_MAX_WORKERS)
+    add_embeddings_dir_argument(parser)
     parser.add_argument("--output-dir", type=Path, required=True)
-    args = parser.parse_args()
+    add_scoring_arguments(parser)
+    args = parser.parse_args(argv)
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    api = load_api(args.checkout)
+    api = api_factory(args.checkout)
     node_values = read_node_feature_values(api)
     groups = reconstruct_groups(node_values)
     all_pairs = build_retrieval_pairs(groups)
@@ -348,11 +344,10 @@ def main() -> None:
     baseline_pairs = as_node_pairs(baseline_pairs_raw)
     background_node_ids = [n for n in list_psalms_half_verse_nodes(api) if n not in marked_nodes]
 
-    (cached_pair_rows, cached_baseline_rows, cached_scope_rows), cached_models = load_cached_detail(
-        args.output_dir
+    (cached_pair_rows, cached_baseline_rows, cached_scope_rows), cached_models = (
+        load_cached_parquet_set(args.output_dir, _OUTPUT_FILES)
     )
-    if cached_models:
-        print(f"reusing {len(cached_models)} cached models from {args.output_dir}", file=sys.stderr)
+    report_reuse(cached_models, args.output_dir)
 
     model_paths = uncached_model_paths(args.embeddings_dir, cached_models)
     pair_rows: list[dict[str, Any]] = list(cached_pair_rows)
@@ -365,9 +360,10 @@ def main() -> None:
         baseline_pairs_raw=baseline_pairs_raw,
         background_node_ids=background_node_ids,
     )
-    for model_pairs, model_baselines, model_scopes in map_in_order(
-        score, model_paths, args.workers
-    ):
+    for scored in map_in_order(skipping_unscorable(score), model_paths, args.workers):
+        if scored is None:
+            continue
+        model_pairs, model_baselines, model_scopes = scored
         pair_rows.extend(model_pairs)
         baseline_rows.extend(model_baselines)
         scope_rows.extend(model_scopes)

@@ -73,7 +73,7 @@ def test_sparse_psalm_centroids_matches_the_dense_function_to_float_tolerance() 
     assert set(psalm_ids) == set(dense_result)
     dense_arr = sparse_result.toarray()
     for i, psalm in enumerate(psalm_ids):
-        np.testing.assert_allclose(dense_arr[i], dense_result[psalm], rtol=1e-6)
+        np.testing.assert_allclose(dense_arr[i], dense_result[psalm], rtol=0, atol=1e-6)
 
 
 def test_sparse_psalm_centroids_skips_a_psalm_with_a_partially_missing_node() -> None:

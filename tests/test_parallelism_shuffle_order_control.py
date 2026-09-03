@@ -1,8 +1,6 @@
 from pathlib import Path
 
-import numpy as np
-import pyarrow as pa
-import pyarrow.parquet as pq
+from conftest import _write_embeddings_parquet as _write_parquet
 
 from parallelism.pairs import build_retrieval_pairs
 from parallelism.scripts.shuffle_order_control import score_separation_auc
@@ -27,21 +25,6 @@ def _group(
         member_nodes=member_nodes,
         member_ambiguous=member_ambiguous or tuple(False for _ in member_ids),
     )
-
-
-def _write_parquet(path: Path, vectors: dict[int, list[float]]) -> None:
-    node_ids = sorted(vectors)
-    dim = len(vectors[node_ids[0]])
-    matrix = np.array([vectors[n] for n in node_ids], dtype="<f4")
-    table = pa.table(
-        {
-            "node_id": pa.array(node_ids, type=pa.int32()),
-            "vector": pa.FixedSizeListArray.from_arrays(
-                pa.array(matrix.flatten(), type=pa.float32()), dim
-            ),
-        }
-    )
-    pq.write_table(table, path)
 
 
 class TestScoreSeparationAuc:

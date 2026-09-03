@@ -1,26 +1,9 @@
 from pathlib import Path
 
-import numpy as np
-import pyarrow as pa
-import pyarrow.parquet as pq
+from conftest import _write_embeddings_parquet as _write_parquet
 
 from genre.pairs import build_genre_pairs
 from genre.scripts.shuffle_order_control import score_genre_ap, shuffled_scores_by_genre
-
-
-def _write_parquet(path: Path, vectors: dict[int, list[float]]) -> None:
-    node_ids = sorted(vectors)
-    dim = len(vectors[node_ids[0]])
-    matrix = np.array([vectors[n] for n in node_ids], dtype="<f4")
-    table = pa.table(
-        {
-            "node_id": pa.array(node_ids, type=pa.int32()),
-            "vector": pa.FixedSizeListArray.from_arrays(
-                pa.array(matrix.flatten(), type=pa.float32()), dim
-            ),
-        }
-    )
-    pq.write_table(table, path)
 
 
 class TestScoreGenreAp:

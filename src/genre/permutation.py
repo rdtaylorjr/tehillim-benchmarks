@@ -1,22 +1,18 @@
 """Psalm-label permutation test for one-vs-rest genre AUC, jointly across genres (maxT)."""
 
-from dataclasses import dataclass
-
 import numpy as np
 
+from library.blocking import row_blocks, rows_per_block
 from library.errors import InsufficientDataError
 from library.fast_metrics import fast_auc
+from library.permutation_test import (
+    GroupPermutationResult,
+    maxt_p_values,
+    permuted_label_batches,
+)
+from library.protocol import DEFAULT_N_GROUP_PERMUTATIONS
 
 _MIN_PSALMS_FOR_PERMUTATION = 2
-
-
-@dataclass(frozen=True, slots=True)
-class GenrePermutationResult:
-    genres: tuple[str, ...]
-    auc_observed: tuple[float, ...]
-    p_perm: tuple[float, ...]
-    p_maxT: tuple[float, ...]  # noqa: N815 -- Westfall-Young (1993) maxT, matches the CSV/JSON field name
-    n_permutations: int
 
 
 def one_vs_rest_masks(genre_codes: np.ndarray, genre_index: int) -> tuple[np.ndarray, np.ndarray]:
@@ -42,6 +38,15 @@ def _batched_separation(
     sims: np.ndarray, rows: np.ndarray, cols: np.ndarray, is_target_batch: np.ndarray
 ) -> np.ndarray:
     """Batched one-vs-rest (AUC - 0.5) for many draws at once, over one fixed sort of sims."""
+    #: Draws are independent, so chunking is exact and caps two draws-by-pairs float64 arrays.
+    n_pairs_total = len(rows)
+    if len(is_target_batch) > rows_per_block(n_pairs_total):
+        return np.concatenate(
+            [
+                _batched_separation(sims, rows, cols, is_target_batch[span])
+                for span in row_blocks(len(is_target_batch), n_pairs_total)
+            ]
+        )
     n_pairs = sims.shape[0]
     same_batch = is_target_batch[:, rows] & is_target_batch[:, cols]
     population_batch = is_target_batch[:, rows] | is_target_batch[:, cols]
@@ -80,11 +85,11 @@ def joint_psalm_label_permutation_test(
     similarity_matrix: np.ndarray,
     genre_codes: np.ndarray,
     genres: tuple[str, ...],
-    n_permutations: int = 2000,
-    rng: np.random.Generator | None = None,
-) -> GenrePermutationResult:
+    n_permutations: int = DEFAULT_N_GROUP_PERMUTATIONS,
+    *,
+    rng: np.random.Generator,
+) -> GroupPermutationResult:
     """One-sided permutation p per genre's one-vs-rest AUC, plus a Westfall-Young (1993) maxT."""
-    rng = rng if rng is not None else np.random.default_rng()
     n = similarity_matrix.shape[0]
     if n < _MIN_PSALMS_FOR_PERMUTATION:
         raise InsufficientDataError(
@@ -102,32 +107,16 @@ def joint_psalm_label_permutation_test(
     # Signed, not |AUC-0.5|, so a genre separated in the opposite direction is not flagged.
     separation_observed = auc_observed - 0.5
 
-    tiled_codes = np.tile(genre_codes, (n_permutations, 1))
-    permuted_codes = rng.permuted(tiled_codes, axis=1)
-
+    permuted_codes = permuted_label_batches(genre_codes, n_permutations, rng)
     null_separation = np.full((n_permutations, n_genres), np.nan)
     for g in range(n_genres):
-        is_target_batch = permuted_codes == g
-        null_separation[:, g] = _batched_separation(sims, rows, cols, is_target_batch)
+        null_separation[:, g] = _batched_separation(sims, rows, cols, permuted_codes == g)
+    permutation = maxt_p_values(separation_observed, null_separation)
 
-    max_null_separation = np.nanmax(null_separation, axis=1)
-
-    p_perm = np.full(n_genres, np.nan)
-    p_maxT = np.full(n_genres, np.nan)  # noqa: N806 -- Westfall-Young maxT term
-    for g in range(n_genres):
-        valid = ~np.isnan(null_separation[:, g])
-        p_perm[g] = (np.sum(null_separation[valid, g] >= separation_observed[g]) + 1) / (
-            int(np.sum(valid)) + 1
-        )
-        valid_max = ~np.isnan(max_null_separation)
-        p_maxT[g] = (np.sum(max_null_separation[valid_max] >= separation_observed[g]) + 1) / (
-            int(np.sum(valid_max)) + 1
-        )
-
-    return GenrePermutationResult(
+    return GroupPermutationResult(
         genres=genres,
-        auc_observed=tuple(auc_observed.tolist()),
-        p_perm=tuple(p_perm.tolist()),
-        p_maxT=tuple(p_maxT.tolist()),
+        observed=tuple(auc_observed.tolist()),
+        p_perm=tuple(permutation.p_per_group.tolist()),
+        p_maxt=tuple(permutation.p_maxt.tolist()),
         n_permutations=n_permutations,
     )

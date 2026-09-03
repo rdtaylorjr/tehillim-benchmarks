@@ -1,9 +1,13 @@
 import numpy as np
+import pytest
+import scipy.sparse as sp
 
+from library.errors import InsufficientDataError
 from parallelism.node_pairs import (
     as_node_pairs,
     filter_node_pairs_with_vectors,
     pair_similarities,
+    pair_similarities_sparse,
 )
 
 
@@ -103,3 +107,14 @@ class TestPairSimilaritiesSparse:
         pairs = [((1,), (2,)), ((1,), (99,))]
 
         assert filter_node_pairs_with_vectors(pairs, {1, 2}) == [((1,), (2,))]
+
+
+def test_pair_similarities_rejects_an_empty_pair_list() -> None:
+    """No pairs means no similarity to summarise, which a batch must report and skip over."""
+    with pytest.raises(InsufficientDataError, match="at least one pair"):
+        pair_similarities([], {1: np.array([1.0, 0.0])})
+
+
+def test_pair_similarities_sparse_rejects_an_empty_pair_list() -> None:
+    with pytest.raises(InsufficientDataError, match="at least one pair"):
+        pair_similarities_sparse([], [1], sp.csr_matrix(np.array([[1.0, 0.0]])))

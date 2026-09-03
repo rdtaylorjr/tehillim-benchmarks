@@ -6,6 +6,7 @@ import numpy as np
 
 from library.ap_gap_auc_bootstrap import ApGapAucCI, Split, bootstrap_ap_gap_and_auc
 from library.calibration import BackgroundStats
+from library.protocol import DEFAULT_N_RESAMPLES
 from parallelism.node_pairs import NodePairs, pair_similarities
 
 PsalmIndices = dict[int, np.ndarray]
@@ -57,8 +58,9 @@ def block_bootstrap_ap_gap_and_auc(
     node_vectors: dict[int, np.ndarray],
     background: BackgroundStats,
     node_to_psalm: dict[int, int],
-    n_resamples: int = 1000,
-    rng: np.random.Generator | None = None,
+    n_resamples: int = DEFAULT_N_RESAMPLES,
+    *,
+    rng: np.random.Generator,
 ) -> ApGapAucCI:
     """BCa 95% CI for AP (primary), gap, and AUC, resampling whole psalms."""
     return block_bootstrap_ap_gap_and_auc_from_similarities(
@@ -80,11 +82,11 @@ def block_bootstrap_ap_gap_and_auc_from_similarities(
     baseline_sims: np.ndarray,
     background: BackgroundStats,
     node_to_psalm: dict[int, int],
-    n_resamples: int = 1000,
-    rng: np.random.Generator | None = None,
+    n_resamples: int = DEFAULT_N_RESAMPLES,
+    *,
+    rng: np.random.Generator,
 ) -> ApGapAucCI:
     """Same CI as block_bootstrap_ap_gap_and_auc, from already-computed pair similarities."""
-    rng = rng if rng is not None else np.random.default_rng()
     true_psalms = np.array([node_to_psalm[pair[0][0]] for pair in true_pairs])
     baseline_psalms = np.array([node_to_psalm[pair[0][0]] for pair in baseline_pairs])
 

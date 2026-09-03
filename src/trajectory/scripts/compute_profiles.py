@@ -1,7 +1,7 @@
 """Computes each psalm's content centroid and half-verses sequence, all models."""
 
 import argparse
-import sys
+from collections.abc import Callable
 from functools import partial
 from itertools import combinations
 from pathlib import Path
@@ -10,8 +10,9 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from library.bhsa import DEFAULT_CHECKOUT, list_psalms_half_verses_by_psalm, load_bhsa_api
+from library.bhsa import list_psalms_half_verses_by_psalm, load_bhsa_api
 from library.centroid import psalm_centroids, sparse_psalm_centroids
+from library.cli import add_embeddings_dir_argument, add_scoring_arguments, report_reuse
 from library.embeddings import (
     dataset_identifier,
     is_sparse_embeddings,
@@ -20,8 +21,9 @@ from library.embeddings import (
 )
 from library.incremental_cache import load_cached_parquet_set
 from library.model_files import uncached_model_paths
-from library.parallel_models import DEFAULT_MAX_WORKERS, map_in_order
 from library.rows_output import write_dataframe_parquet
+from library.scoring import skipping_unscorable
+from library.worker_pool import map_in_order
 from trajectory.distance import content_distance, dtw_curve_distance, structural_distance_dtw
 from trajectory.geometry import adjacent_similarity, step_magnitude, turning_angle
 from trajectory.self_similarity import self_similarity_matrix
@@ -130,23 +132,26 @@ def score_model(
     return len(rows), distance_rows(model, profiles)
 
 
-def main() -> None:
+def main(
+    argv: list[str] | None = None,
+    *,
+    api_factory: Callable[[str], Any] = load_bhsa_api,
+) -> None:
+    """Parses the arguments this module documents, runs the batch, and writes its output."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("embeddings_dir", type=Path)
-    parser.add_argument("--checkout", default=DEFAULT_CHECKOUT, help="BHSA checkout spec")
-    parser.add_argument("--workers", type=int, default=DEFAULT_MAX_WORKERS)
+    add_embeddings_dir_argument(parser)
     parser.add_argument("--output-dir", type=Path, required=True)
-    args = parser.parse_args()
+    add_scoring_arguments(parser)
+    args = parser.parse_args(argv)
     args.output_dir.mkdir(parents=True, exist_ok=True)
 
-    api = load_bhsa_api(args.checkout)
+    api = api_factory(args.checkout)
     half_verses_by_psalm = list_psalms_half_verses_by_psalm(api)
 
     (cached_distance_rows,), cached_models = load_cached_parquet_set(
         args.output_dir, ("trajectory_distances.parquet",)
     )
-    if cached_models:
-        print(f"reusing {len(cached_models)} cached models from {args.output_dir}", file=sys.stderr)
+    report_reuse(cached_models, args.output_dir)
 
     # A cached model still needs rescoring when its own profile shard is missing.
     complete = {
@@ -158,7 +163,10 @@ def main() -> None:
     score = partial(
         score_model, half_verses_by_psalm=half_verses_by_psalm, output_dir=args.output_dir
     )
-    for model_n_rows, model_distance_rows in map_in_order(score, model_paths, args.workers):
+    for scored in map_in_order(skipping_unscorable(score), model_paths, args.workers):
+        if scored is None:
+            continue
+        model_n_rows, model_distance_rows = scored
         n_profile_rows += model_n_rows
         all_distance_rows.extend(model_distance_rows)
 

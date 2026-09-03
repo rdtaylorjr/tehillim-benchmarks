@@ -2,20 +2,23 @@
 
 import argparse
 import csv
+from collections.abc import Callable
 from functools import partial
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
-from library.bhsa import DEFAULT_CHECKOUT
+from library.cli import add_scoring_arguments
 from library.embeddings import (
     is_sparse_embeddings,
     load_embeddings,
     load_sparse_embeddings,
 )
-from library.order_shuffle import DEFAULT_N_SHUFFLES, order_shuffle_result
-from library.parallel_models import IO_BOUND_MAX_WORKERS, map_in_order
+from library.order_shuffle import order_shuffle_result
 from library.retrieval_metrics import cosine_similarity_matrix, sparse_cosine_similarity_matrix
+from library.shuffle_draws import select_shuffle_draws
+from library.worker_pool import map_in_order
 from parallelism.evaluate import build_side_vectors, build_side_vectors_sparse
 from parallelism.pairs import RetrievalPair, build_retrieval_pairs, filter_pairs_with_vectors
 from parallelism.separation import similarity_separation
@@ -40,23 +43,25 @@ def score_separation_auc(path: Path, all_pairs: list[RetrievalPair]) -> float:
     return similarity_separation(similarities).auc
 
 
-def main() -> None:
+def main(
+    argv: list[str] | None = None,
+    *,
+    api_factory: Callable[[str], Any] = load_api,
+) -> None:
+    """Parses the arguments this module documents, runs the batch, and writes its output."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("real_embeddings", type=Path)
     parser.add_argument("shuffled_embeddings_dir", type=Path)
-    parser.add_argument("--checkout", default=DEFAULT_CHECKOUT, help="BHSA/module checkout spec")
-    parser.add_argument("--n-shuffles", type=int, default=DEFAULT_N_SHUFFLES)
-    parser.add_argument("--workers", type=int, default=IO_BOUND_MAX_WORKERS)
-    parser.add_argument("--output", type=Path, default=None)
-    args = parser.parse_args()
+    add_scoring_arguments(parser, with_shuffles=True)
+    args = parser.parse_args(argv)
 
-    api = load_api(args.checkout)
+    api = api_factory(args.checkout)
     node_values = read_node_feature_values(api)
     groups = reconstruct_groups(node_values)
     all_pairs = build_retrieval_pairs(groups)
 
     auc_real = score_separation_auc(args.real_embeddings, all_pairs)
-    shuffled_paths = sorted(args.shuffled_embeddings_dir.glob("**/*.parquet"))[: args.n_shuffles]
+    shuffled_paths = select_shuffle_draws(args.shuffled_embeddings_dir, args.n_shuffles)
     score = partial(score_separation_auc, all_pairs=all_pairs)
     auc_shuffled = map_in_order(score, shuffled_paths, args.workers)
 

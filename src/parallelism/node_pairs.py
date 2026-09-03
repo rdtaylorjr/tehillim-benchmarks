@@ -5,6 +5,7 @@ from collections.abc import Container
 import numpy as np
 import scipy.sparse as sp
 
+from library.errors import InsufficientDataError
 from library.retrieval_metrics import paired_cosine_similarity, sparse_paired_cosine_similarity
 from parallelism.pairs import RetrievalPair
 
@@ -41,6 +42,8 @@ def _pool_side(
 
 def pair_similarities(pairs: NodePairs, node_vectors: dict[int, np.ndarray]) -> np.ndarray:
     """Row-wise cosine similarity, mean-pooling any side that spans more than one node."""
+    if not pairs:
+        raise InsufficientDataError("pair similarity needs at least one pair")
     source_vecs = _pool_side([source for source, _ in pairs], node_vectors)
     target_vecs = _pool_side([target for _, target in pairs], node_vectors)
     return paired_cosine_similarity(source_vecs, target_vecs)
@@ -69,6 +72,8 @@ def pair_similarities_sparse(
     pairs: NodePairs, node_ids: list[int], node_vectors: sp.csr_matrix
 ) -> np.ndarray:
     """Sparse analogue of pair_similarities, mean-pooling and comparing without densifying."""
+    if not pairs:
+        raise InsufficientDataError("pair similarity needs at least one pair")
     source_vecs = _pool_side_sparse([source for source, _ in pairs], node_ids, node_vectors)
     target_vecs = _pool_side_sparse([target for _, target in pairs], node_ids, node_vectors)
     return sparse_paired_cosine_similarity(source_vecs, target_vecs)

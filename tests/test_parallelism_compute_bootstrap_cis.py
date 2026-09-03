@@ -91,3 +91,26 @@ def test_score_model_scopes_share_one_seeded_generator_so_reruns_repeat(
     second = score_model(*args, n_resamples=20, seed=0)
 
     assert first == second
+
+
+def test_score_model_passes_over_a_scope_the_corpus_has_no_pairs_for(
+    tmp_path: Path, write_embeddings_parquet
+) -> None:
+    """A parallelism type nobody annotated is an absent scope, not a model that failed to score."""
+    path = write_embeddings_parquet(
+        tmp_path / "domain=d" / "model=mine" / "v.parquet", _VECTORS_SPREAD
+    )
+    true_pairs = as_node_pairs([(1, 2), (3, 4), (13, 14), (15, 16)])
+    scopes = {"overall": true_pairs, "Antithetic": as_node_pairs([])}
+
+    rows = score_model(
+        path,
+        scopes,
+        as_node_pairs([(5, 6), (7, 8), (17, 18), (19, 20)]),
+        [9, 10, 11, 12],
+        _NODE_TO_PSALM_SPREAD,
+        n_resamples=20,
+        seed=0,
+    )
+
+    assert [row["scope"] for row in rows] == ["overall"]

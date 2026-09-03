@@ -122,7 +122,7 @@ def test_build_side_vectors_sparse_matches_the_dense_function_to_float_tolerance
     dense_result = build_side_vectors(pairs, "source", dense_vectors)
     sparse_result = build_side_vectors_sparse(pairs, "source", node_ids, sparse_matrix)
 
-    np.testing.assert_allclose(sparse_result.toarray(), dense_result, rtol=1e-6)
+    np.testing.assert_allclose(sparse_result.toarray(), dense_result, rtol=0, atol=1e-6)
 
 
 def test_build_side_vectors_sparse_raises_on_a_missing_node() -> None:
@@ -210,7 +210,7 @@ def test_build_side_vectors_pools_a_multi_node_span_to_its_mean() -> None:
 
 
 def test_build_side_vectors_rejects_a_pair_with_an_empty_node_span() -> None:
-    """reduceat needs non-empty runs; an empty span would silently borrow the next span's row."""
+    """Reduceat needs non-empty runs; an empty span would silently borrow the next span's row."""
     pairs = [_pair_with(()), _pair_with((1,))]
     node_vectors = {1: np.array([1.0, 0.0], dtype=np.float32), 99: np.array([1.0, 0.0], np.float32)}
 
@@ -357,3 +357,38 @@ def test_score_embedding_file_skips_pairs_whose_nodes_have_no_vector(tmp_path) -
     )
 
     assert [p.pair_id for p in used] == ["kept0", "kept1", "kept2", "kept3"]
+
+
+def test_a_model_missing_node_ids_is_skippable_rather_than_fatal() -> None:
+    """A model whose file lacks nodes is degenerate for this benchmark, not a programming error."""
+    from library.errors import BenchmarkDataError
+    from library.scoring import skipping_unscorable
+    from parallelism.evaluate import build_side_vectors
+
+    pair = RetrievalPair(
+        pair_id="p1",
+        group_range="1",
+        parallelism_type="Synonymous",
+        signature="sig",
+        source_nodes=(1, 2),
+        target_nodes=(3,),
+        source_indicator="a",
+        target_indicator="b",
+    )
+
+    with pytest.raises(BenchmarkDataError):
+        build_side_vectors([pair], "source", {1: np.ones(4, dtype=np.float32)})
+
+    def score(_item: object) -> None:
+        build_side_vectors([pair], "source", {1: np.ones(4, dtype=np.float32)})
+
+    assert skipping_unscorable(score, label=lambda _item: "model")(object()) is None
+
+
+def test_run_evaluation_rejects_a_corpus_with_a_single_retrieval_pair() -> None:
+    """One pair leaves no other pair to rank against, so the background mean is undefined."""
+    pairs = [_pair("p1", (1,), (2,), "Synonymous")]
+    node_vectors = {1: np.array([1.0, 0.0]), 2: np.array([1.0, 0.0])}
+
+    with pytest.raises(InsufficientDataError, match="at least two retrieval pairs"):
+        run_evaluation(pairs, node_vectors, n_permutations=10, rng=np.random.default_rng(0))

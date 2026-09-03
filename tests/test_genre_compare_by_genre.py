@@ -1,3 +1,4 @@
+from functools import partial
 from pathlib import Path
 
 import numpy as np
@@ -5,15 +6,15 @@ import pandas as pd
 import pytest
 import scipy.sparse as sp
 
-from genre.pairs import build_genre_pairs
-from genre.scripts.compare_by_genre import (
+from genre.across_genres import (
     GenreRunConfig,
-    add_fdr_columns,
     compare_model_across_genres,
     compare_model_across_genres_sparse,
-    load_cached_rows,
-    score_model,
 )
+from genre.pairs import build_genre_pairs
+from genre.scripts.compare_by_genre import add_fdr_columns, load_cached_genre_rows, score_model
+from library.errors import BenchmarkDataError
+from library.scoring import skipping_unscorable
 
 
 def _config(genre_by_psalm, genres, pairs) -> GenreRunConfig:
@@ -244,7 +245,7 @@ def _cache_row() -> dict:
 
 class TestLoadCachedRows:
     def test_returns_empty_when_the_cache_path_does_not_exist(self, tmp_path) -> None:
-        rows, models = load_cached_rows(tmp_path / "missing.csv")
+        rows, models = load_cached_genre_rows(tmp_path / "missing.csv")
 
         assert rows == []
         assert models == set()
@@ -253,7 +254,7 @@ class TestLoadCachedRows:
         cache_path = tmp_path / "cache.csv"
         pd.DataFrame([_cache_row()]).to_csv(cache_path, index=False)
 
-        rows, models = load_cached_rows(cache_path)
+        rows, models = load_cached_genre_rows(cache_path)
 
         assert models == {"m1"}
         assert len(rows) == 1
@@ -264,7 +265,7 @@ class TestLoadCachedRows:
         cache_path = tmp_path / "cache.csv"
         pd.DataFrame([_cache_row()]).to_csv(cache_path, index=False)
 
-        rows, _ = load_cached_rows(cache_path)
+        rows, _ = load_cached_genre_rows(cache_path)
 
         for stale_column in ("naive_q", "naive_q_by", "perm_q", "perm_q_by", "maxT_q", "maxT_q_by"):
             assert stale_column not in rows[0]
@@ -274,7 +275,7 @@ class TestLoadCachedRows:
         rows = [_cache_row(), {**_cache_row(), "model": "m2", "genre": "Praise"}]
         pd.DataFrame(rows).to_csv(cache_path, index=False)
 
-        _, models = load_cached_rows(cache_path)
+        _, models = load_cached_genre_rows(cache_path)
 
         assert models == {"m1", "m2"}
 
@@ -320,18 +321,17 @@ class TestScoreModel:
         assert {row["model"] for row in rows} == {"mine"}
         assert {row["genre"] for row in rows} == set(genres)
 
-    def test_skips_a_model_whose_psalm_vectors_cannot_be_scored(
+    def test_raises_for_a_model_whose_psalm_vectors_cannot_be_scored(
         self, tmp_path: Path, write_embeddings_parquet
     ) -> None:
-        """A single usable psalm leaves no pair to compare, so the model is skipped, not fatal."""
+        """One usable psalm leaves no pair, which the shared policy turns into a skip."""
         path = write_embeddings_parquet(
             tmp_path / "domain=d" / "model=tiny" / "v.parquet", {1: [1.0, 0.0]}
         )
-
-        rows = score_model(
-            path,
-            {1: [1]},
-            GenreRunConfig(
+        score = partial(
+            score_model,
+            half_verses_by_psalm={1: [1]},
+            config=GenreRunConfig(
                 genre_by_psalm={1: "Lament"},
                 genres=("Lament",),
                 pairs=build_genre_pairs({1: "Lament"}),
@@ -341,4 +341,6 @@ class TestScoreModel:
             ),
         )
 
-        assert rows == []
+        with pytest.raises(BenchmarkDataError):
+            score(path)
+        assert skipping_unscorable(score)(path) is None
